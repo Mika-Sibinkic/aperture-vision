@@ -1,0 +1,14 @@
+{
+  "_schema": {
+    "description": "Seed — neutral weights until specialist ensemble (v2.0) is online and ground truth proves per-specialist accuracy. Sums to 1.0.",
+    "regenerated_by": "training-loop/learning/ensemble_weights.py",
+    "initial_seed": true
+  },
+  "weights": {
+    "container_classifier":     0.20,
+    "food_classifier":          0.20,
+    "volume_estimator":         0.20,
+    "differential_comparator":  0.20,
+    "prior_image_retriever":    0.20
+  }
+}

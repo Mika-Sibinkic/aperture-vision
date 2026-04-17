@@ -1,0 +1,12 @@
+[Unit]
+Description=Aperture — run learning cycle daily at 3 AM
+Requires=aperture-learning.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=aperture-learning.service
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pyezviz==0.2.2.5
+requests==2.32.3
+# Deterministic ground-truth OCR of the dock platform scale
+opencv-python-headless==4.10.0.84
+pytesseract==0.3.13
+numpy==2.2.0
+# Learning-loop deps (imported by training-loop/learning/run_cycle.py)
+PyYAML==6.0.2
+google-api-python-client==2.159.0
+google-auth==2.37.0

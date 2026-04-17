@@ -1,0 +1,25 @@
+[Unit]
+Description=Aperture Bridge — Hik-Connect snapshot relay for Cul2vate camera
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aperture
+Group=aperture
+WorkingDirectory=/opt/aperture-bridge
+EnvironmentFile=/etc/aperture-bridge.env
+ExecStart=/opt/aperture-bridge/venv/bin/python /opt/aperture-bridge/bridge.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+# Hardening — the bridge only needs outbound HTTPS + a localhost listen
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/aperture-bridge
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
