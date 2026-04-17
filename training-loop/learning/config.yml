@@ -1,0 +1,62 @@
+# Aperture learning-loop hyperparameters.
+# Conservative defaults — tuned to prevent runaway drift, not to maximize
+# convergence speed. Tighten only after multi-week accuracy improves.
+
+ground_truth:
+  # Weight OCR readings below this are ignored (probably stale scale or noise).
+  min_scale_reading_lbs: 0.5
+  # Weight readings above this flag for human review (probably OCR error).
+  max_scale_reading_lbs: 2000.0
+  # How long after a donation button-press we'll accept an OCR ground truth
+  # before assuming the user walked away without weighing.
+  ground_truth_grace_seconds: 120
+
+density:
+  # Per-class density is static lookup until we have N real observations.
+  min_samples_before_use: 5
+  # Exponential moving average decay. 30-day half-life means a reading from
+  # 30 days ago carries half the weight of today's.
+  ema_half_life_days: 30
+  # Single cycle can't move a learned density more than this. Prevents one
+  # bad OCR reading from wrecking the table.
+  max_per_cycle_delta_pct: 5.0
+  # If learned density drifts more than this from the Open-Food-Facts
+  # baseline for the class, flag for human review rather than apply.
+  sanity_max_deviation_from_baseline_pct: 30.0
+
+bias_multiplier:
+  min_samples_before_use: 3
+  max_multiplier: 1.25   # never amplify the model's weight by more than 25%
+  min_multiplier: 0.80   # never de-amplify below 80%
+  ema_half_life_days: 14
+
+classifier_reference_sets:
+  # Max number of few-shot examples carried forward per specialist.
+  max_refs_per_class: 8
+  # Only keep misclassification examples (the teaching value is in mistakes).
+  keep_correct_examples: false
+  # Drop references older than this — old photos don't reflect current
+  # supplier/season mix.
+  max_age_days: 90
+
+ensemble:
+  # If the specialists disagree by more than this, confidence drops
+  # below the user-visible threshold and the donation is flagged.
+  max_inter_specialist_variance_pct: 25.0
+  # How fast ensemble weights can shift per cycle.
+  weight_ema_alpha: 0.15
+
+safeguards:
+  # Require at least this many new ground-truth samples before running a
+  # cycle. Prevents running on a day with zero real donations.
+  min_new_samples_for_cycle: 2
+  # If the last 3 cycles all produced zero residual improvement AND
+  # convergence-to-self is detected, pause learning and flag for human review.
+  convergence_to_self_check: true
+  # Absolute floor — never predict below this many pounds unless confidence
+  # is explicitly < 0.3 (heuristic: "a donation is at least a pound").
+  minimum_nonzero_prediction_lbs: 0.5
+
+logging:
+  verbose: true
+  append_log_path: state/cycle-log.jsonl

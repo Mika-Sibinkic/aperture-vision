@@ -1,0 +1,16 @@
+[Unit]
+Description=Aperture — daily learning cycle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aperture
+Group=aperture
+WorkingDirectory=/opt/aperture-bridge/repo
+EnvironmentFile=/etc/aperture-learning.env
+ExecStart=/opt/aperture-bridge/venv/bin/python -m training_loop.learning.run_cycle --sheet-id ${APERTURE_LOG_SHEET_ID}
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true

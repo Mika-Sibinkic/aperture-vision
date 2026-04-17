@@ -1,0 +1,14 @@
+# Copy to cloudflared-config.yml and fill in the two TUNNEL_* slots and the
+# camera IP. Do NOT commit the real file — it contains secrets.
+
+tunnel: TUNNEL_UUID_GOES_HERE
+credentials-file: /home/pi/.cloudflared/TUNNEL_UUID_GOES_HERE.json
+
+ingress:
+  - hostname: camera.example.com
+    service: http://<camera-ip>     # ⇨ Hikvision camera LAN IP (find during install)
+    originRequest:
+      # Camera responds on HTTP port 80 by default. Raise timeout for big snapshots.
+      connectTimeout: 10s
+      noTLSVerify: true
+  - service: http_status:404

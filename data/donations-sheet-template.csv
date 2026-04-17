@@ -1,0 +1,1 @@
+triggered_at,location,description,donation_id,item_type,container_type,tare_lbs,inside_zone,charuco_detected,weight_lbs,weight_lbs_raw,weight_lbs_low,weight_lbs_high,bias_multiplier,density_used,density_source,confidence,scale_reading_lbs,scale_confidence,true_weight_lbs,ground_truth_source,residual_vs_scale_lbs,known_failure_flags,notes,prompt_version,model

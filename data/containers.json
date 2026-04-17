@@ -1,0 +1,65 @@
+{
+  "_schema": {
+    "description": "Tare-weight lookup for containers the vision model will classify. Unit: pounds. The workflow's 'Apply container tare' node matches detected container_type against keys here and subtracts the tare from the model's weight estimate to report net food weight.",
+    "how_to_extend": "Add more entries as new containers show up. `keywords` are lowercase substrings that the vision model's `item_type` or `notes` fields are matched against. First match wins. Keep the keywords generic enough that gpt-4o-mini will naturally use them.",
+    "last_updated": "2026-04-16",
+    "confidence": "seed values are rough — refine with a kitchen scale as the team encounters each container type"
+  },
+  "containers": {
+    "banana-box-standard": {
+      "tare_lbs": 3.2,
+      "description": "Standard Chiquita/Dole banana shipping box, waxed cardboard",
+      "keywords": ["banana box", "chiquita", "dole", "produce box"]
+    },
+    "milk-crate-standard": {
+      "tare_lbs": 4.1,
+      "description": "Dairy milk crate, plastic, ~13x13x11",
+      "keywords": ["milk crate", "dairy crate"]
+    },
+    "bread-tray-plastic": {
+      "tare_lbs": 2.8,
+      "description": "Standard plastic bakery tray",
+      "keywords": ["bread tray", "bakery tray"]
+    },
+    "5gal-bucket-empty": {
+      "tare_lbs": 2.2,
+      "description": "5-gallon food-grade plastic bucket with lid",
+      "keywords": ["5 gallon bucket", "five gallon", "bucket"]
+    },
+    "pallet-wood-48x40": {
+      "tare_lbs": 35.0,
+      "description": "Standard GMA wooden pallet, 48x40",
+      "keywords": ["pallet", "wooden pallet", "gma pallet"]
+    },
+    "cardboard-box-small": {
+      "tare_lbs": 0.8,
+      "description": "Generic small cardboard box, ~12x12x12",
+      "keywords": ["small cardboard box", "small box"]
+    },
+    "cardboard-box-medium": {
+      "tare_lbs": 1.6,
+      "description": "Generic medium cardboard box, ~18x18x18",
+      "keywords": ["medium cardboard box", "medium box"]
+    },
+    "cardboard-box-large": {
+      "tare_lbs": 2.8,
+      "description": "Generic large cardboard box, ~24x18x18",
+      "keywords": ["large cardboard box", "large box", "shipping box"]
+    },
+    "reusable-shopping-bag": {
+      "tare_lbs": 0.3,
+      "description": "Standard reusable grocery bag",
+      "keywords": ["reusable bag", "shopping bag", "grocery bag"]
+    },
+    "produce-mesh-bag-50lb": {
+      "tare_lbs": 0.15,
+      "description": "Mesh bag of the sort onions/potatoes ship in",
+      "keywords": ["mesh bag", "onion bag", "potato bag"]
+    },
+    "no-container-loose": {
+      "tare_lbs": 0.0,
+      "description": "Item presented loose, no container",
+      "keywords": ["loose", "no container", "bare", "directly on floor"]
+    }
+  }
+}

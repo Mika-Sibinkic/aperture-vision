@@ -1,0 +1,8 @@
+{
+  "_schema": {
+    "description": "Seed file — empty until the first learning cycle runs on the Dell G7 with ground-truth data. When empty, the n8n workflow falls back to the prompt-embedded density ranges.",
+    "regenerated_by": "training-loop/learning/density_learner.py",
+    "initial_seed": true
+  },
+  "densities": {}
+}

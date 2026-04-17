@@ -1,0 +1,18 @@
+node_modules/
+.next/
+.vercel/
+.venv/
+.bridge-venv/
+demo/.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+!.env.example
+N8N Bridge Token.rtf
+SECRETS.local.md
+checkpoint.local.md
+demo/output/
+* 2.*
+* 2
