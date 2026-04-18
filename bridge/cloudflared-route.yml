@@ -1,12 +1,22 @@
-# Add this ingress rule to your existing Dell G7 cloudflared config.yml
-# (typically /etc/cloudflared/config.yml). Order matters — put this BEFORE
-# your catch-all 404 rule.
+# Aperture Bridge — Cloudflare Tunnel ingress rule for Dell G7.
 #
-# After editing:
-#     sudo systemctl restart cloudflared
-#     cloudflared tunnel route dns <TUNNEL_NAME> aperture-bridge.<YOUR_DOMAIN>
+# Insert this entry into your existing Dell cloudflared config at
+# /etc/cloudflared/config.yml (or ~/.cloudflared/config.yml, depending on
+# your NSOS install). Order matters — keep it BEFORE the catch-all
+# `- service: http_status:404` line.
+#
+# Your existing tunnel (per NSOS DELL-SETUP.md):
+#   Tunnel name:  nsos-server
+#   Tunnel UUID:  <cloudflare-tunnel-id>
+#   Domain:       example.com
+#   Existing ingress:  ssh.example.com  ->  ssh://localhost:22
+#
+# After editing config.yml, run (once):
+#   cloudflared tunnel route dns nsos-server bridge.example.com
+# Then restart:
+#   sudo systemctl restart cloudflared
 
-  - hostname: aperture-bridge.YOUR_DOMAIN.com
+  - hostname: bridge.example.com
     service: http://localhost:8002
     originRequest:
       connectTimeout: 10s

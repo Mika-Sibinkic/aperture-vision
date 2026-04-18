@@ -12,7 +12,7 @@ export function ServiceWorkerRegister() {
         navigator.serviceWorker
           .register("/sw.js", { scope: "/" })
           .catch(() => {
-            // Silent — PWA works fine without SW, just no offline.
+            // Silent. PWA works fine without SW, just no offline.
           });
       },
       { once: true, signal: controller.signal }

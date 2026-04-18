@@ -1,13 +1,13 @@
 :root {
-  --bg: #0b0b0d;
-  --card: #16171b;
-  --ink: #f5f5f7;
-  --muted: #9a9aa2;
-  --accent: #65d18b;
-  --accent-pressed: #3ba361;
-  --danger: #ff5c5c;
-  --warn: #f5b84a;
-  --border: #26272d;
+  --bg: #f7f4ee;
+  --card: #ffffff;
+  --ink: #2a2925;
+  --muted: #7a7268;
+  --accent: #86b187;
+  --accent-pressed: #6b9b6e;
+  --danger: #c24848;
+  --warn: #d19a3e;
+  --border: #e7e2d6;
   --radius: 22px;
   --safe-top: env(safe-area-inset-top);
   --safe-bottom: env(safe-area-inset-bottom);
@@ -45,7 +45,7 @@ main {
   align-items: baseline;
   justify-content: space-between;
 }
-.brand { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+.brand { font-size: 22px; font-weight: 600; letter-spacing: 0; }
 .loc { font-size: 13px; color: var(--muted); }
 
 .card {
@@ -60,7 +60,7 @@ label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 8px
 textarea.note {
   width: 100%;
   min-height: 88px;
-  background: #1d1e23;
+  background: #faf8f3;
   border: 1px solid var(--border);
   color: var(--ink);
   border-radius: 14px;
@@ -71,7 +71,7 @@ textarea.note {
   -webkit-user-select: text;
   user-select: text;
 }
-textarea.note::placeholder { color: #6b6c74; }
+textarea.note::placeholder { color: #a89f92; }
 
 .trigger {
   appearance: none;
@@ -81,12 +81,11 @@ textarea.note::placeholder { color: #6b6c74; }
   border: 0;
   border-radius: 28px;
   background: var(--accent);
-  color: #0a1a10;
+  color: #ffffff;
   font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
+  font-weight: 600;
+  letter-spacing: 0;
   transition: transform 80ms ease, background 120ms ease, opacity 120ms ease;
-  box-shadow: 0 8px 28px rgba(101, 209, 139, 0.25);
 }
 .trigger:active { transform: scale(0.985); background: var(--accent-pressed); }
 .trigger[disabled] { opacity: 0.6; }
@@ -104,9 +103,9 @@ textarea.note::placeholder { color: #6b6c74; }
   align-items: baseline;
   gap: 12px;
 }
-.status .k { color: var(--muted); font-size: 13px; letter-spacing: 0.3px; text-transform: uppercase; }
-.status .v { font-size: 18px; font-weight: 600; }
-.status .headline { font-size: 44px; font-weight: 800; letter-spacing: -0.5px; }
+.status .k { color: var(--muted); font-size: 14px; letter-spacing: 0; text-transform: none; }
+.status .v { font-size: 18px; font-weight: 500; }
+.status .headline { font-size: 44px; font-weight: 700; letter-spacing: -0.5px; }
 .status .ok { color: var(--accent); }
 .status .err { color: var(--danger); }
 .status .warn { color: var(--warn); }
@@ -114,7 +113,7 @@ textarea.note::placeholder { color: #6b6c74; }
 
 .spinner {
   width: 22px; height: 22px; border-radius: 50%;
-  border: 3px solid rgba(255,255,255,0.15);
+  border: 3px solid rgba(0,0,0,0.08);
   border-top-color: var(--accent);
   animation: spin 0.9s linear infinite;
 }
@@ -125,9 +124,5 @@ textarea.note::placeholder { color: #6b6c74; }
   font-size: 12px;
   color: var(--muted);
   text-align: center;
-  letter-spacing: 0.3px;
-}
-
-@media (prefers-color-scheme: light) {
-  /* Intentionally dark-only — matches outdoor loading dock legibility better. */
+  letter-spacing: 0;
 }
