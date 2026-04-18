@@ -21,7 +21,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   const location =
-    process.env.NEXT_PUBLIC_LOCATION_LABEL ?? "Cul2vate — Ellington Ag Center";
+    process.env.NEXT_PUBLIC_LOCATION_LABEL ?? "Cul2vate, Ellington Ag Center";
 
   const trigger = useCallback(async () => {
     setPhase("sending");
@@ -82,7 +82,7 @@ export default function Home() {
       <div className="card status" aria-live="polite">
         {phase === "idle" && (
           <div className="muted">
-            Place donation inside the taped zone, then press the green button.
+            Place the donation inside the taped zone, then press the green button.
           </div>
         )}
 
@@ -90,9 +90,9 @@ export default function Home() {
           <>
             <div className="row">
               <div className="spinner" />
-              <div className="v">Capturing image and estimating weight…</div>
+              <div className="v">Reading the camera. One moment.</div>
             </div>
-            <div className="muted">Typical response: 4–10 seconds.</div>
+            <div className="muted">Usually about 4 to 10 seconds.</div>
           </>
         )}
 
@@ -112,7 +112,7 @@ export default function Home() {
               <span className="v">
                 {result.confidence !== null
                   ? `${Math.round(result.confidence * 100)}%`
-                  : "—"}
+                  : "unknown"}
               </span>
             </div>
             <div className="row">
@@ -141,7 +141,7 @@ export default function Home() {
       </div>
 
       <div className="footer">
-        Null Systems · Aperture v0.1 · Tap anywhere outside the button to dismiss the keyboard.
+        Null Systems. Tap outside the box to hide the keyboard.
       </div>
     </main>
   );

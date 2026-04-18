@@ -3,8 +3,8 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
 
 export const metadata: Metadata = {
-  title: "Aperture — Donation Log",
-  description: "Null Systems inventory camera — Cul2vate deployment",
+  title: "Aperture",
+  description: "Null Systems inventory camera for Cul2vate",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -25,7 +25,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0b0b0d"
+  themeColor: "#f7f4ee"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
