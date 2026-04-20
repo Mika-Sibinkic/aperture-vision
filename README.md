@@ -3,6 +3,38 @@
 Null Systems' AI donation-weighing camera. This repo is the deployment for
 Cul2vate Nashville at the Ellington Ag Center loading dock.
 
+## Autonomous entry
+
+If Mika said "take care of aperture" (or any variant) — **read `ACT.md`
+first** and execute its Q1–Q7 decision tree. Don't present options, don't
+ask what to do, just act on the first unblocked step and guide Mika
+through his piece when input is required.
+
+## Resuming work — read these in order
+
+1. **`ACT.md`** — autonomous action playbook (decision tree + safety rails)
+2. **`SPEC.md`** — perceived specification (challenge + flesh out where wrong)
+3. **`checkpoint.md`** — current live state (what's deployed, what's paused,
+   every URL / token / ID you'll need, progress log)
+4. **`DELL-SESSION.md`** — single-page copy-paste bundle for Mika's RustDesk
+   session on the Dell G7 (Phases 2+3). Open this side-by-side during the session.
+5. **`outreach/adam-followup-2026-04-17.md`** — the client contact ask (sent 2026-04-18,
+   awaiting reply on camera serial + Farmbrite creds).
+6. **`NEXT-STEPS.md`** — action-ordered blocker map with exact commands to
+   run next
+7. **`docs/MIGRATION-RUNBOOK.md`** — full 5-phase Mac-bridge → Dell+Hik-Connect
+   migration details
+8. **`scripts/check-state.sh`** — one-command live audit (run it first):
+   ```bash
+   cd "<local-workspace>"
+   source .env
+   cd "Active Projects/Branch Cam Testing/aperture"
+   bash scripts/check-state.sh
+   ```
+
+Post-production backlog: `docs/V2-AGENDA.md`. PWA styling history and
+demo-night lineage: `docs/AGENDA-TONIGHT.md`.
+
 ## Architecture (one screen)
 
 ```
