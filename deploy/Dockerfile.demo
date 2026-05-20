@@ -1,0 +1,35 @@
+# Aperture — demo container (static-mode pipeline).
+#
+# This is the Cul2vate-style static demo containerized so it can run on any
+# Docker host with no system-Python dependencies. Drop on a laptop, a Linux
+# server, or an EnterpriseCo appliance and `docker compose run demo` pulls images
+# from a mounted volume + writes the accuracy report alongside.
+#
+# Build: docker build -f deploy/Dockerfile.demo -t aperture/demo:0.1 .
+# Run:   docker run --rm \
+#          -e OPENAI_API_KEY=sk-... \
+#          -v $(pwd)/demo/test-images:/app/demo/test-images:ro \
+#          -v $(pwd)/demo/output:/app/demo/output \
+#          aperture/demo:0.1
+
+FROM python:3.12-slim AS base
+
+# OpenCV needs libgl + libglib for image I/O on slim images.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install demo deps as a separate layer so source edits don't bust the cache.
+COPY demo/requirements.txt /app/demo/requirements.txt
+RUN pip install --no-cache-dir -r demo/requirements.txt
+
+# Copy demo code + the prompt the harness embeds.
+COPY demo /app/demo
+COPY prompts /app/prompts
+
+# Default: run the harness against whatever's in /app/demo/test-images.
+ENTRYPOINT ["python", "demo/harness.py"]
+CMD ["--manifest", "demo/manifest.yaml", "--output-dir", "demo/output"]

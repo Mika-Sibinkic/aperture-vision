@@ -1,0 +1,24 @@
+# Aperture bridge — production snapshot service (FastAPI + pyezviz).
+# Replaces the Dell G7 / RustDesk install path with a portable container
+# that runs anywhere Docker runs.
+#
+# Build: docker build -f deploy/Dockerfile.bridge -t aperture/bridge:0.1 .
+# Run:   docker run -d --name aperture-bridge --env-file deploy/.env -p 8002:8002 aperture/bridge:0.1
+
+FROM python:3.12-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 tesseract-ocr \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY bridge/requirements.txt /app/bridge/requirements.txt
+RUN pip install --no-cache-dir -r bridge/requirements.txt
+
+COPY bridge /app/bridge
+
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8002
+CMD ["uvicorn", "bridge.bridge:app", "--host", "0.0.0.0", "--port", "8002"]
