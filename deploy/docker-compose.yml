@@ -1,0 +1,48 @@
+# Aperture appliance — single-host docker-compose for on-prem deployment.
+#
+# What it runs:
+#   - aperture-bridge: FastAPI snapshot service (Hikvision cloud or direct RTSP)
+#   - aperture-demo: one-shot accuracy harness (CLI; for ad-hoc validation)
+#
+# In EnterpriseCo deployment, the conveyor-mode inference service replaces aperture-demo;
+# this compose file is the static-mode equivalent for nonprofit / pilot use.
+#
+# Quick start:
+#   cp deploy/.env.example deploy/.env       # fill in the slots marked ⇨
+#   docker compose -f deploy/docker-compose.yml up -d aperture-bridge
+#   docker compose -f deploy/docker-compose.yml run --rm aperture-demo
+version: "3.9"
+
+services:
+  aperture-bridge:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bridge
+    image: aperture/bridge:0.1
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8002/healthz', timeout=5).read(); sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  aperture-demo:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.demo
+    image: aperture/demo:0.1
+    env_file:
+      - .env
+    volumes:
+      - ../demo/test-images:/app/demo/test-images:ro
+      - ../demo/output:/app/demo/output
+    profiles: ["ondemand"]   # only runs when explicitly requested via `compose run`
