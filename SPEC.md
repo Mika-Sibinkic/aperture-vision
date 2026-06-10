@@ -1,5 +1,7 @@
 # Aperture — Perceived Specification
 
+> Accuracy approach is an open portfolio (SKU lookup, training data, OCR, priors, hybrid) — see docs/ACCURACY-ROADMAP.md before extending the vision pipeline. Prompt should eventually emit sku_candidate / label_text / confidence.
+
 **Author:** Claude (Mika's working instance, session 2026-04-17 → 2026-04-18)
 **Status:** PERCEIVED — my understanding of the product, not verified against every source.
 **Purpose of this file:** give a fresh instance enough context to challenge, correct, and flesh out this spec where I'm wrong, vague, or missing something.

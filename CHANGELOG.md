@@ -3,6 +3,7 @@
 > State: stable · Optionality: low · Open to Change: append-only. Format: [Keep a Changelog](https://keepachangelog.com). Entries before 2026-06-10 reconstructed during Git migration from checkpoint logs, file timestamps, Pocket recordings, and Notion records.
 
 ## [Unreleased]
+- Accuracy method portfolio (docs/ACCURACY-ROADMAP.md): SKU scanning, training data, OCR, priors, scale-in-the-loop, hybrid routing — no single method presumed; >=95% reliable is the gate
 - **Reality baseline (2026-06-10):** image model only; training data not yet attached; target = Cul2vate loading-dock produce. EnterpriseCo material is pitch-posture (see docs/BUSINESS.md)
 - Cul2vate Mac→Dell bridge migration (Phases 2–5; paused since 2026-04-18, awaiting the client contact's camera serial + Farmbrite creds and a Dell RustDesk session)
 - Farmbrite write path (gated on API key; workflow guard-skips to "Farmbrite skipped (pending key)")
