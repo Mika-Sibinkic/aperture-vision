@@ -173,3 +173,19 @@ weight multipliers before writing to Farmbrite. Clamped to ±20% movement
 per cycle (anti-hallucination guardrail).
 
 Run as a daily cron or GitHub Action — see `training-loop/README.md`.
+
+## Comprehensive repo (migrated 2026-06-10)
+
+This repo is now the **canonical product home** for Aperture (superseding the
+old empty Aperture-product-repo). Beyond the deployment code above:
+
+- `AGENTS.md` — agent conventions: autonomous entry, recursive-doc principle, **secrets convention** (committed docs carry `REDACTED-see-SECRETS.local.md` markers; live values in gitignored `SECRETS.local.md` / `checkpoint.local.md`)
+- `CHANGELOG.md`, `docs/STATE.md` — reconstructed history + frozen migration snapshot
+- `docs/history/ORIGINS.md` — Branch food bank → Cul2vate → EnterpriseCo narrative (from Pocket recordings + Notion)
+- `docs/product/OVERVIEW.md` — product one-pager (mirrors Google Drive artifacts)
+- `docs/deals/enterpriseco/` — EnterpriseCo deal docs 01–14 + product-home charter
+- `docs/sales/` — pricing models, the prospect contact call briefs, EnterpriseCo deck
+
+History note: commits dated before 2026-06-10 are synthesized from file
+timestamps during migration; pre-git folder preserved in
+`../aperture-pre-git-backup.tar.gz`.
