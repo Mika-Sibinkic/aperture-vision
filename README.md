@@ -176,6 +176,8 @@ Run as a daily cron or GitHub Action — see `training-loop/README.md`.
 
 ## Comprehensive repo (migrated 2026-06-10)
 
+**Start with `docs/BUSINESS.md` for the honest current state** — deals, pipeline, and what Aperture actually is today (image model + training-data plan for Cul2vate produce; not EnterpriseCo-ready).
+
 This repo is now the **canonical product home** for Aperture (superseding the
 old empty Aperture-product-repo). Beyond the deployment code above:
 
