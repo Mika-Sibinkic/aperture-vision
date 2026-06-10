@@ -1,5 +1,7 @@
 # Deployment State — snapshot at Git migration (2026-06-10)
 
+> **Reality check (2026-06-10, per Mika):** current state is NOT an EnterpriseCo-ready deployment. It is an image model with the hope of attaching training data, targeting Cul2vate loading-dock produce measurement. Component statuses below describe plumbing, not validated measurement capability. See docs/BUSINESS.md.
+
 > State: frozen snapshot · Optionality: none (historical record) · Open to Change: no — live state belongs in checkpoint.md.
 
 ## Tracks
