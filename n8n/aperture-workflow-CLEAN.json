@@ -1,0 +1,567 @@
+{
+  "name": "Aperture — Cul2vate Donation Logger (CLEAN v1.0)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aperture-donate",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "e7af253c-d1fa-414d-8d0e-5a373e154376",
+      "name": "Webhook: donation button",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1344,
+        816
+      ],
+      "webhookId": "aperture-donate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.headers['x-aperture-token'] }}",
+              "rightValue": "=REDACTED-see-SECRETS.local.md"
+            }
+          ]
+        }
+      },
+      "id": "0a97fa99-1205-4944-b84f-2d466b5b42f0",
+      "name": "Verify Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"prompt_version\": \"v0.2\",\n  \"model\": \"gpt-4o\",\n  \"system_prompt\": \"You are the vision component of Aperture, a donation-weighing camera for Cul2vate's loading dock at Ellington Ag Center. You analyze one photo per call.\\n\\nCAMERA GEOMETRY (fixed — do not doubt):\\n- Hikvision AcuSense <device-serial>, 5MP, varifocal fixed at install time.\\n- Mounted high on a brick wall, diagonal downward view.\\n- 6ft x 6ft yellow-taped staging zone on the floor, 20–40 ft from the camera.\\n- A 36\\\"x44\\\" Dibond ChArUco calibration board on the wall: 32\\\"x40\\\" checkerboard, 6\\\" squares, 2\\\" white border. Fixed spatial reference.\\n\\nOUTPUT: return ONLY a JSON object matching this schema — no markdown, no prose:\\n{\\n  \\\"item_type\\\": \\\"short phrase (e.g. 'mixed produce' | 'cased water bottles' | 'frozen ground beef')\\\",\\n  \\\"container_type\\\": \\\"one of: banana-box-standard | milk-crate-standard | bread-tray-plastic | 5gal-bucket-empty | pallet-wood-48x40 | cardboard-box-small | cardboard-box-medium | cardboard-box-large | reusable-shopping-bag | produce-mesh-bag-50lb | no-container-loose | unknown\\\",\\n  \\\"inside_zone\\\": true,\\n  \\\"charuco_detected\\\": true,\\n  \\\"pixels_per_inch\\\": 2.3,\\n  \\\"estimated_volume_cu_in\\\": 1728,\\n  \\\"estimated_density_lbs_per_cu_in\\\": 0.028,\\n  \\\"weight_lbs\\\": 48.4,\\n  \\\"weight_lbs_low\\\": 41.2,\\n  \\\"weight_lbs_high\\\": 56.0,\\n  \\\"confidence\\\": 0.82,\\n  \\\"known_failure_flags\\\": [],\\n  \\\"notes\\\": \\\"one short sentence, optional\\\"\\n}\\n\\nPROCEDURE:\\n1. Detect the taped staging zone. If donation is not clearly inside: set inside_zone=false, weight_lbs=null, note='outside staging zone — reposition'.\\n2. Detect the ChArUco board. If detected: compute pixels-per-inch from the 6\\\" square size. If NOT detected: set charuco_detected=false, fall back to a standard pallet scale reference (48\\\"x40\\\" ≈ 2.25 px/in at 40 ft), reduce confidence by 0.15.\\n3. Classify item_type from visible packaging/shape.\\n4. Classify container_type — what the food is sitting in or on. Pick the CLOSEST match from the enum above. If truly none fit, return 'unknown'. Downstream code subtracts the container's known tare weight from your total estimate, so always include the container in your weight_lbs (total = food + container), and set container_type accurately so the subtraction is correct.\\n5. Estimate total volume in cubic inches from bounding box on floor plane × visible stack height. For stacks: layer_count = stack_height_in / single_layer_height_in.\\n6. Apply density prior per item type:\\n   - Cased water / canned goods: 0.030–0.045 lb/cu_in\\n   - Mixed fresh produce: 0.012–0.022 lb/cu_in\\n   - Frozen meat cases: 0.035–0.050 lb/cu_in\\n   - Dry goods (rice, beans, flour): 0.025–0.035 lb/cu_in\\n   - Leafy produce (lettuce, greens): 0.005–0.010 lb/cu_in\\n7. Emit a weight range [weight_lbs_low, weight_lbs_high]. weight_lbs is the midpoint and INCLUDES the container tare (code will subtract it).\\n8. confidence is a calibrated self-estimate: 0.95 = 'within 10%', 0.5 = 'could be off 50%'. Be honest — residual loop weights training examples by confidence.\\n\\nKNOWN FAILURE FLAGS (populate when relevant): 'partial_occlusion', 'mixed_items', 'severe_perspective', 'low_light', 'glare_or_shadow', 'oversized', 'ambiguous_container'.\\n\\nHARD CONSTRAINTS:\\n- Never guess item types you cannot see.\\n- Never hallucinate ChArUco detection. If you can't count squares: charuco_detected=false.\\n- Never return narrative outside the JSON. A single JSON object only.\\n- Always include container_type from the enum — 'no-container-loose' if the food is directly on the pallet/floor with no wrapping.\\n\\nHIDDEN-WEIGHT EVAL MODE: If user message contains 'eval_mode: true', do not reference any known weight that may leak via metadata. Predict purely from the image.\"\n}"
+      },
+      "id": "f2b55365-c0d4-4e48-a463-ca44604fa665",
+      "name": "Load prompt + config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -896,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://<cloudflare-tunnel-host>/snapshot_with_scale",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer REDACTED-see-SECRETS.local.md"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 25000
+        }
+      },
+      "id": "92b550e0-dfe5-4f9d-942f-a32e44fc2bb7",
+      "name": "Fetch snapshot + scale OCR (via Bridge)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 5,
+      "position": [
+        -656,
+        736
+      ],
+      "notes": "Pulls JPEG + deterministic scale-LCD OCR reading from the Dell G7 bridge. The scale reading — when stable — becomes the ground truth for this donation's residual."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unpack the bridge's JSON response into: (a) a binary JPEG for the\n// vision model, (b) scale reading + confidence as json fields for the\n// downstream ground-truth writer.\nconst body = $json;\nif (!body || !body.image_b64) {\n  throw new Error('Bridge returned malformed payload: ' + JSON.stringify(body).slice(0, 200));\n}\nconst buf = Buffer.from(body.image_b64, 'base64');\nreturn [{\n  json: {\n    scale_reading_lbs: body.scale_reading_lbs,\n    scale_confidence: body.scale_confidence,\n    scale_stable: body.scale_stable,\n    scale_raw_text: body.scale_raw_text,\n    image_bytes: body.image_bytes\n  },\n  binary: {\n    data: {\n      data: buf.toString('base64'),\n      mimeType: 'image/jpeg',\n      fileName: 'snapshot.jpg'\n    }\n  }\n}];"
+      },
+      "id": "67c920a9-3009-4519-bb05-ddc5d2bd3a1e",
+      "name": "Unpack bridge response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "={{ $('Load prompt + config').first().json.model }}",
+          "mode": "list"
+        },
+        "text": "=description: {{ $('Webhook: donation button').item.json.body.description || '—' }}\nlocation: {{ $('Webhook: donation button').item.json.body.location || '—' }}\ntriggered_at: {{ $('Webhook: donation button').item.json.body.triggered_at }}\neval_mode: false",
+        "inputType": "base64",
+        "binaryPropertyName": "data",
+        "options": {
+          "maxTokens": 800,
+          "responseFormat": "json_object",
+          "systemMessage": "={{ $('Load prompt + config').first().json.system_prompt }}"
+        }
+      },
+      "id": "b483163d-edab-4856-9bb6-6a7953a6852e",
+      "name": "Vision: weight estimate",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -240,
+        736
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "<n8n-credential-id>",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse vision JSON, subtract container tare (from data/containers.json),\n// then apply bias-table multiplier (learned). Merge with trigger payload.\n\n// ── Static container lookup (mirror of data/containers.json — edit both\n// places together, or refactor to fetch from Vercel in a future revision). ──\nconst CONTAINERS = {\n  'banana-box-standard':      { tare_lbs: 3.2,  keywords: ['banana box','chiquita','dole','produce box'] },\n  'milk-crate-standard':      { tare_lbs: 4.1,  keywords: ['milk crate','dairy crate'] },\n  'bread-tray-plastic':       { tare_lbs: 2.8,  keywords: ['bread tray','bakery tray'] },\n  '5gal-bucket-empty':        { tare_lbs: 2.2,  keywords: ['5 gallon bucket','five gallon','bucket'] },\n  'pallet-wood-48x40':        { tare_lbs: 35.0, keywords: ['pallet','wooden pallet','gma pallet'] },\n  'cardboard-box-small':      { tare_lbs: 0.8,  keywords: ['small cardboard box','small box'] },\n  'cardboard-box-medium':     { tare_lbs: 1.6,  keywords: ['medium cardboard box','medium box'] },\n  'cardboard-box-large':      { tare_lbs: 2.8,  keywords: ['large cardboard box','large box','shipping box'] },\n  'reusable-shopping-bag':    { tare_lbs: 0.3,  keywords: ['reusable bag','shopping bag','grocery bag'] },\n  'produce-mesh-bag-50lb':    { tare_lbs: 0.15, keywords: ['mesh bag','onion bag','potato bag'] },\n  'no-container-loose':       { tare_lbs: 0.0,  keywords: ['loose','no container','bare','directly on floor'] }\n};\n\nfunction resolveContainer(visionResponse) {\n  // Exact match on container_type key\n  const key = (visionResponse.container_type || '').toLowerCase().trim();\n  if (CONTAINERS[key]) return { key, ...CONTAINERS[key] };\n  // Substring match across item_type + notes + container_type\n  const haystack = [\n    visionResponse.container_type || '',\n    visionResponse.item_type || '',\n    visionResponse.notes || ''\n  ].join(' ').toLowerCase();\n  for (const [k, def] of Object.entries(CONTAINERS)) {\n    for (const kw of def.keywords) {\n      if (haystack.includes(kw)) return { key: k, ...def };\n    }\n  }\n  // Unmatched — no tare subtraction, log the raw classification\n  return { key: visionResponse.container_type || 'unknown', tare_lbs: 0.0, unmatched: true };\n}\n\n// ── Parse vision JSON ──\nconst raw = $json.message?.content ?? $json.content ?? $json;\nlet vision;\ntry {\n  vision = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (e) {\n  throw new Error('Vision returned non-JSON: ' + String(raw).slice(0, 300));\n}\n\nconst trigger = $('Webhook: donation button').first().json.body || {};\nconst config = $('Load prompt + config').first().json;\nconst bridge = $('Unpack bridge response').first().json || {};\nconst biasTableNode = $('Fetch bias table (optional)').first();\nconst biasTable = (biasTableNode && biasTableNode.json && typeof biasTableNode.json === 'object') ? biasTableNode.json : {};\nconst densNode = $('Fetch learned densities (optional)').first();\nconst densTable = (densNode && densNode.json && densNode.json.densities) ? densNode.json.densities : {};\n\n// ── Layer 1: container tare subtraction (deterministic) ──\nconst container = resolveContainer(vision);\nconst rawWeight = vision.weight_lbs;\nconst netWeight = (typeof rawWeight === 'number')\n  ? Math.max(0, rawWeight - container.tare_lbs)\n  : null;\n\n// ── Layer 2: learned density override (if available for this item_type) ──\n// When we have enough ground-truth samples for the class, replace the model's\n// internal density with the observed regional value and recompute weight.\nconst densKey = (vision.item_type || '').toLowerCase().trim();\nconst dens = densTable[densKey];\nlet densityOverrideApplied = false;\nlet weightFromLearnedDensity = null;\nif (dens && dens.using_learned && vision.estimated_volume_cu_in) {\n  const containerMassAdj = container.tare_lbs || 0;\n  weightFromLearnedDensity = Math.max(0, vision.estimated_volume_cu_in * dens.density_lbs_per_cu_in_mean);\n  densityOverrideApplied = true;\n}\n\n// ── Layer 3: bias multiplier from residual history ──\nconst biasKey = densKey;  // same key granularity as density\nconst multiplier = (biasTable && biasTable[biasKey] && typeof biasTable[biasKey] === 'number') ? biasTable[biasKey] : 1.0;\n// Prefer learned-density weight over model-density weight when available\nconst preBiasWeight = weightFromLearnedDensity !== null ? weightFromLearnedDensity : netWeight;\nconst adjustedWeight = (preBiasWeight !== null) ? preBiasWeight * multiplier : null;\n\n// ── Ground truth from scale OCR (deterministic, passes through to Sheet) ──\nconst scaleReading = (typeof bridge.scale_reading_lbs === 'number' && bridge.scale_stable === true)\n  ? bridge.scale_reading_lbs : null;\nconst residualVsScale = (scaleReading !== null && adjustedWeight !== null)\n  ? adjustedWeight - scaleReading : null;\n\nreturn [{ json: {\n  ...vision,\n  donation_id: trigger.donation_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),\n  container_type: container.key,\n  tare_lbs: container.tare_lbs,\n  container_unmatched: container.unmatched === true,\n  weight_lbs_raw: rawWeight,\n  weight_lbs_net: netWeight,\n  weight_lbs_from_learned_density: weightFromLearnedDensity,\n  weight_lbs: adjustedWeight,\n  density_override_applied: densityOverrideApplied,\n  density_used: dens ? dens.density_lbs_per_cu_in_mean : null,\n  density_source: dens && dens.using_learned ? 'learned' : 'model',\n  bias_multiplier: multiplier,\n  bias_applied: multiplier !== 1.0,\n  scale_reading_lbs: scaleReading,\n  scale_confidence: bridge.scale_confidence ?? null,\n  true_weight_lbs: scaleReading,   // equivalent — used by the learning cycle\n  ground_truth_source: scaleReading !== null ? 'scale_ocr' : null,\n  residual_vs_scale_lbs: residualVsScale,\n  description: trigger.description ?? null,\n  location: trigger.location ?? null,\n  triggered_at: trigger.triggered_at ?? new Date().toISOString(),\n  prompt_version: config.prompt_version,\n  model: config.model\n}}];"
+      },
+      "id": "d6a633bc-0bbe-4e35-9274-22bad9691d7a",
+      "name": "Parse vision + tare + bias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "=<google-sheet-id>",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Donations",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "triggered_at": "={{ $json.triggered_at }}",
+            "location": "={{ $json.location || '' }}",
+            "description": "={{ $json.description || '' }}",
+            "item_type": "={{ $json.item_type || '' }}",
+            "inside_zone": "={{ $json.inside_zone }}",
+            "charuco_detected": "={{ $json.charuco_detected }}",
+            "weight_lbs": "={{ $json.weight_lbs }}",
+            "weight_lbs_raw": "={{ $json.weight_lbs_raw }}",
+            "weight_lbs_low": "={{ $json.weight_lbs_low }}",
+            "weight_lbs_high": "={{ $json.weight_lbs_high }}",
+            "bias_multiplier": "={{ $json.bias_multiplier }}",
+            "confidence": "={{ $json.confidence }}",
+            "known_failure_flags": "={{ ($json.known_failure_flags || []).join(',') }}",
+            "notes": "={{ $json.notes || '' }}",
+            "prompt_version": "={{ $json.prompt_version }}",
+            "model": "={{ $json.model }}",
+            "container_type": "={{ $json.container_type || '' }}",
+            "tare_lbs": "={{ $json.tare_lbs }}",
+            "donation_id": "={{ $json.donation_id }}",
+            "scale_reading_lbs": "={{ $json.scale_reading_lbs }}",
+            "scale_confidence": "={{ $json.scale_confidence }}",
+            "true_weight_lbs": "={{ $json.true_weight_lbs }}",
+            "ground_truth_source": "={{ $json.ground_truth_source || '' }}",
+            "residual_vs_scale_lbs": "={{ $json.residual_vs_scale_lbs }}",
+            "density_used": "={{ $json.density_used }}",
+            "density_source": "={{ $json.density_source }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "43f09f4e-6ac8-49f9-aa3f-56a8021147c6",
+      "name": "Append to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        928
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<n8n-credential-id>",
+          "name": "Google Sheets OAuth2 API"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Fire-and-forget. Fails silently if Google creds aren't wired yet."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.inside_zone === true && typeof $json.weight_lbs === 'number' }}"
+            }
+          ]
+        }
+      },
+      "id": "a7a9f1e4-59b1-42d1-bb1f-ec18f960b8fb",
+      "name": "Guard: inside zone + has weight",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        224,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ !!($env.FARMBRITE_API_BASE && $env.FARMBRITE_INVENTORY_TYPE_ID && $env.FARMBRITE_LOCATION_ID) }}"
+            }
+          ]
+        }
+      },
+      "id": "6d83b361-d569-4ee8-a89a-e5a8f43f12fe",
+      "name": "Guard: Farmbrite configured",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        464,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FARMBRITE_API_BASE }}/inventory_types/{{ $env.FARMBRITE_INVENTORY_TYPE_ID }}/add",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"amount\": {{ $json.weight_lbs || 0 }},\n  \"location_id\": \"{{ $env.FARMBRITE_LOCATION_ID }}\",\n  \"description\": \"Aperture {{ $json.item_type || 'donation' }} · conf {{ ($json.confidence * 100).toFixed(0) }}% · prompt {{ $json.prompt_version }} · bias×{{ $json.bias_multiplier.toFixed(2) }}{{ $json.description ? ' · ' + $json.description : '' }}\"\n}",
+        "options": {
+          "timeout": 10000
+        },
+        "neverError": true
+      },
+      "id": "bc6fa621-0b7d-40e2-b9dd-566e3603c551",
+      "name": "Write to Farmbrite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 5,
+      "position": [
+        704,
+        528
+      ],
+      "notes": "Stubbed for v1 — guard node skips this until FARMBRITE_API_BASE env is set + real credentials attached."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Farmbrite not configured — pass the parsed vision through so the PWA\n// still shows weight + item + confidence, but farmbrite_id stays null.\nreturn [{ json: { __farmbrite_skipped: true } }];"
+      },
+      "id": "c664ac99-0f14-4945-a2ce-770956ba374a",
+      "name": "Farmbrite skipped (pending key)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unified response shape for the PWA.\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst fb = $json;\nconst farmbriteSkipped = fb?.__farmbrite_skipped === true;\nconst farmbriteId = farmbriteSkipped ? null : (fb?.id ?? fb?.uuid ?? fb?._id ?? null);\n\nconst residualEst = (parsed.weight_lbs_high != null && parsed.weight_lbs_low != null)\n  ? (parsed.weight_lbs_high - parsed.weight_lbs_low) / 2\n  : null;\n\nlet notes = parsed.notes ?? null;\nif (farmbriteSkipped) {\n  notes = (notes ? notes + ' · ' : '') + 'Farmbrite pending (no API key yet); execution logged in n8n history.';\n}\n\nreturn [{ json: {\n  weight_lbs: parsed.weight_lbs ?? null,\n  weight_residual_est: residualEst,\n  item_type: parsed.item_type ?? null,\n  confidence: parsed.confidence ?? null,\n  charuco_detected: parsed.charuco_detected ?? false,\n  farmbrite_id: farmbriteId,\n  farmbrite_pending: farmbriteSkipped,\n  notes\n}}];"
+      },
+      "id": "f6f523f1-106f-474f-badb-f3f239badce9",
+      "name": "Shape response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "3d9c1d9e-bf89-41e1-9f30-211a0bd2c9e4",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1184,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Zone-miss or null-weight: respond without writing to Farmbrite.\nconst v = $json;\nreturn [{ json: {\n  weight_lbs: null,\n  weight_residual_est: null,\n  item_type: v.item_type ?? null,\n  confidence: v.confidence ?? null,\n  charuco_detected: v.charuco_detected ?? false,\n  farmbrite_id: null,\n  notes: v.notes ?? (v.inside_zone === false ? 'Outside the yellow zone — reposition and retry.' : 'Could not estimate weight.')\n}}];"
+      },
+      "id": "05b80cf9-0f63-46fc-899e-fc3e820b6fef",
+      "name": "Shape response (skipped)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "06c2aa43-b146-4619-8c74-04854f1a0ad1",
+      "name": "Respond (skipped)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        704,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 401,
+        "responseBody": "={\"error\":\"invalid token\"}"
+      },
+      "id": "07f9de97-1f3e-46bf-a296-10a07587e80b",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -896,
+        960
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: donation button": {
+      "main": [
+        [
+          {
+            "node": "Verify Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Token": {
+      "main": [
+        [
+          {
+            "node": "Load prompt + config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load prompt + config": {
+      "main": [
+        [
+          {
+            "node": "Fetch snapshot + scale OCR (via Bridge)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch snapshot + scale OCR (via Bridge)": {
+      "main": [
+        [
+          {
+            "node": "Unpack bridge response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unpack bridge response": {
+      "main": [
+        [
+          {
+            "node": "Vision: weight estimate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vision: weight estimate": {
+      "main": [
+        [
+          {
+            "node": "Parse vision + tare + bias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse vision + tare + bias": {
+      "main": [
+        [
+          {
+            "node": "Guard: inside zone + has weight",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: inside zone + has weight": {
+      "main": [
+        [
+          {
+            "node": "Guard: Farmbrite configured",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape response (skipped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: Farmbrite configured": {
+      "main": [
+        [
+          {
+            "node": "Write to Farmbrite",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Farmbrite skipped (pending key)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Farmbrite": {
+      "main": [
+        [
+          {
+            "node": "Shape response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Farmbrite skipped (pending key)": {
+      "main": [
+        [
+          {
+            "node": "Shape response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape response": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape response (skipped)": {
+      "main": [
+        [
+          {
+            "node": "Respond (skipped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "tags": [
+    {
+      "name": "Aperture"
+    },
+    {
+      "name": "Cul2vate"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
