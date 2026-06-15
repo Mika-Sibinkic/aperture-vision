@@ -23,7 +23,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Response, Request
 from fastapi.responses import JSONResponse
 from pyezviz import EzvizClient, EzvizCamera
 
@@ -35,6 +35,7 @@ CAMERA_SERIAL      = os.environ["CAMERA_SERIAL"]
 BRIDGE_TOKEN       = os.environ["BRIDGE_TOKEN"]
 SNAPSHOT_TTL_S     = float(os.environ.get("SNAPSHOT_TTL_S", "0.5"))
 LISTEN_PORT        = int(os.environ.get("LISTEN_PORT", "8002"))
+OLLAMA_BASE        = os.environ.get("OLLAMA_BASE", "http://localhost:11434")  # local VLM (never exposed)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -180,6 +181,31 @@ def snapshot_with_scale(authorization: str = Header(default="")):
         "scale_stable": reading.stable if reading else False,
     }
     return JSONResponse(content=payload)
+
+
+@app.api_route("/v1/{path:path}", methods=["GET", "POST"])
+async def ollama_openai_proxy(path: str, request: Request, authorization: str = Header(default="")):
+    """Secure OpenAI-compatible vision gateway. Forwards /v1/* to the LOCAL Ollama
+    (localhost:11434), gated by the same bridge bearer token, so Ollama is never
+    exposed to the internet. n8n's vision node points here:
+      base URL = https://<bridge-host>/v1 , key = BRIDGE_TOKEN , model = qwen2.5vl:3b
+    """
+    if authorization != f"Bearer {BRIDGE_TOKEN}":
+        raise HTTPException(status_code=401, detail="invalid bearer token")
+    import requests as _rq
+    url = OLLAMA_BASE.rstrip("/") + "/v1/" + path
+    body = await request.body()
+    try:
+        r = _rq.request(
+            request.method, url, data=body,
+            headers={"Content-Type": request.headers.get("content-type", "application/json")},
+            timeout=180,
+        )
+    except Exception as e:
+        log.exception("ollama proxy failed")
+        return JSONResponse(status_code=502, content={"error": "vlm unreachable", "detail": str(e)})
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/json"))
 
 
 if __name__ == "__main__":
