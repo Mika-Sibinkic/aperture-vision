@@ -72,10 +72,16 @@ import json
 wf = json.load(open('/tmp/_wf.json'))
 fs = next(n for n in wf['nodes'] if n['name']=='Fetch snapshot + scale OCR (via Bridge)')
 fs['parameters']['url'] = "$DELL_URL"
-for k in ("id","active","createdAt","updatedAt","triggerCount","versionId","tags","shared"):
-    wf.pop(k, None)
-json.dump(wf, open('/tmp/_wf_patched.json','w'), indent=2)
+# n8n public API PUT is strict: body = {name,nodes,connections,settings}, and
+# settings must contain ONLY allowed keys (else 400 "settings must NOT have
+# additional properties"). Verified 2026-06-15.
+ALLOWED = {"saveExecutionProgress","saveManualExecutions","saveDataErrorExecution",
+           "saveDataSuccessExecution","executionTimeout","errorWorkflow","timezone","executionOrder"}
+settings = {k: v for k, v in (wf.get('settings') or {}).items() if k in ALLOWED} or {"executionOrder": "v1"}
+payload = {"name": wf["name"], "nodes": wf["nodes"], "connections": wf["connections"], "settings": settings}
+json.dump(payload, open('/tmp/_wf_patched.json','w'), indent=2)
 print(f"  patched URL to: {fs['parameters']['url']}")
+print(f"  settings kept: {sorted(settings)}")
 PY
 
 say "3. PUT back via API"
