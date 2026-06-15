@@ -1,0 +1,16 @@
+{
+  "_schema": {
+    "description": "Per-item average unit-weight prior (lbs). The harness uses this as a Bayesian prior to constrain the vision weight estimate for recurring items (count_units * avg_unit_weight_lb anchors the estimate). Distinct from data/containers.json (tare). First match by product_name.",
+    "unit": "pounds per single unit of `default_unit`",
+    "source": "Seed values from the Cul2vate Log Template (Avg_Weights tab) — SYNTHETIC seed, low confidence. Replace/extend with real Farmbrite harvest history per docs/training-loop/FARMBRITE-EXTRACTION.md.",
+    "confidence": "seed",
+    "last_updated": "2026-06-15"
+  },
+  "items": {
+    "apples":        { "default_unit": "each", "avg_unit_weight_lb": 0.33, "confidence": "seed" },
+    "oranges":       { "default_unit": "each", "avg_unit_weight_lb": 0.40, "confidence": "seed" },
+    "mixed greens":  { "default_unit": "case", "avg_unit_weight_lb": 1.5,  "confidence": "seed" },
+    "milk, gallon":  { "default_unit": "each", "avg_unit_weight_lb": 8.6,  "confidence": "seed" },
+    "bread loaf":    { "default_unit": "each", "avg_unit_weight_lb": 1.0,  "confidence": "seed" }
+  }
+}
