@@ -8,6 +8,11 @@ type IncomingBody = {
   description?: string;
   triggered_at?: string;
   location?: string;
+  // Optional base64 JPEG captured on-device (iPad LAN pull of the mounted
+  // Hikvision, or the iPad's own camera). When present, n8n uses this frame
+  // instead of fetching from a bridge. Absent for the legacy PWA path.
+  image_b64?: string;
+  source?: string;
 };
 
 export async function POST(req: NextRequest) {
@@ -32,7 +37,8 @@ export async function POST(req: NextRequest) {
     description: (body.description ?? "").slice(0, 2000),
     triggered_at: body.triggered_at ?? new Date().toISOString(),
     location: body.location ?? null,
-    source: "aperture-pwa"
+    image_b64: body.image_b64 ?? null,
+    source: body.source ?? "aperture-pwa"
   };
 
   const controller = new AbortController();
