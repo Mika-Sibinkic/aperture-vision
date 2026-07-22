@@ -35,7 +35,12 @@ CAMERA_SERIAL      = os.environ["CAMERA_SERIAL"]
 BRIDGE_TOKEN       = os.environ["BRIDGE_TOKEN"]
 SNAPSHOT_TTL_S     = float(os.environ.get("SNAPSHOT_TTL_S", "0.5"))
 LISTEN_PORT        = int(os.environ.get("LISTEN_PORT", "8002"))
-OLLAMA_BASE        = os.environ.get("OLLAMA_BASE", "http://localhost:11434")  # local VLM (never exposed)
+# Vision upstream for the /v1 gateway: local Ollama by default, or any hosted
+# OpenAI-compatible endpoint (e.g. NVIDIA NIM: https://integrate.api.nvidia.com).
+# The upstream key (if set) is injected server-side so it never leaves the Dell;
+# n8n authenticates to this bridge with BRIDGE_TOKEN only.
+VISION_UPSTREAM_BASE = os.environ.get("VISION_UPSTREAM_BASE", os.environ.get("OLLAMA_BASE", "http://localhost:11434"))
+VISION_UPSTREAM_KEY  = os.environ.get("VISION_UPSTREAM_KEY", "")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -193,12 +198,15 @@ async def ollama_openai_proxy(path: str, request: Request, authorization: str = 
     if authorization != f"Bearer {BRIDGE_TOKEN}":
         raise HTTPException(status_code=401, detail="invalid bearer token")
     import requests as _rq
-    url = OLLAMA_BASE.rstrip("/") + "/v1/" + path
+    url = VISION_UPSTREAM_BASE.rstrip("/") + "/v1/" + path
     body = await request.body()
+    fwd_headers = {"Content-Type": request.headers.get("content-type", "application/json")}
+    if VISION_UPSTREAM_KEY:                     # inject hosted-provider key server-side
+        fwd_headers["Authorization"] = f"Bearer {VISION_UPSTREAM_KEY}"
     try:
         r = _rq.request(
             request.method, url, data=body,
-            headers={"Content-Type": request.headers.get("content-type", "application/json")},
+            headers=fwd_headers,
             timeout=180,
         )
     except Exception as e:
