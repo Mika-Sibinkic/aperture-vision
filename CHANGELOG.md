@@ -3,6 +3,8 @@
 > State: stable · Optionality: low · Open to Change: append-only. Format: [Keep a Changelog](https://keepachangelog.com). Entries before 2026-06-10 reconstructed during Git migration from checkpoint logs, file timestamps, Pocket recordings, and Notion records.
 
 ## [Unreleased]
+- **Camera-path correction (2026-07-22):** Hik-Connect cloud-pull is VERIFIED DEAD for this camera (pyezviz/pyezvizapi empty device list; hikconnect lib no capture method). Mounted Hikvision is LAN-only → forward paths are A) iPad-camera flow (no hardware, live-today), B) $75 LAN mini-PC (next visit), C) Hik-Partner Pro OpenAPI (~days). See docs/methods/camera-connectivity.md. Dell/pyezviz bridge steps in NEXT-STEPS.md marked SUPERSEDED.
+- **Vision provider:** standardized on NVIDIA NIM (OpenAI-compatible, open VLM) replacing the dry OpenAI node; `bridge/bridge.py` `/v1` gateway injects the upstream key server-side (n8n holds only BRIDGE_TOKEN).
 - Accuracy method portfolio (docs/ACCURACY-ROADMAP.md): SKU scanning, training data, OCR, priors, scale-in-the-loop, hybrid routing — no single method presumed; >=95% reliable is the gate
 - **Reality baseline (2026-06-10):** image model only; training data not yet attached; target = Cul2vate loading-dock produce. EnterpriseCo material is pitch-posture (see docs/BUSINESS.md)
 - Cul2vate Mac→Dell bridge migration (Phases 2–5; paused since 2026-04-18, awaiting the client contact's camera serial + Farmbrite creds and a Dell RustDesk session)
