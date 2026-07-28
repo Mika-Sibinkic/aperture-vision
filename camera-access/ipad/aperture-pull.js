@@ -1,27 +1,37 @@
-// Aperture — iPad on-device camera pull (Scriptable)
+// Aperture — iPad on-tap camera pull (Scriptable)
 // ---------------------------------------------------------------------------
-// WHY THIS EXISTS
-// The mounted Hikvision at the Cul2vate dock is LAN-only (ISAPI digest, HTTP).
-// The iPad is the one always-on-site device already on that LAN and already the
-// button-press front end. iOS will NOT let an app be a persistent inbound
-// server (apps get suspended), so we do NOT make the iPad a server. Instead we
-// use the *tap moment* (foreground): when a volunteer taps, this script pulls a
-// fresh JPEG straight from the camera over the LAN, then POSTs it to the Vercel
-// relay -> n8n -> vision (NIM) -> Google Sheet. No Mac, no LAN box, no
-// Hik-Connect cloud (which is dead for this camera).
+// The volunteer taps this. It pulls a fresh frame from the MOUNTED Hikvision
+// over the Cul2vate LAN, posts it to the Vercel relay, and shows the weight.
 //
-// AUTH: Hikvision ISAPI uses HTTP Digest. Scriptable/Shortcuts are NOT bound by
-// browser mixed-content/CORS rules, so an HTTP pull from an HTTPS-origin app is
-// fine here. The digest response math below is verified against the RFC 2617
-// test vector (see camera-access/ipad/README.md).
+// WHY THE IPAD: the camera is LAN-only (ISAPI digest over HTTP) and Hik-Connect
+// cloud-pull is dead for this model. The iPad is the one always-on-site device
+// on that LAN and is already the button. iOS suspends background apps, so the
+// iPad is NOT a server — it pulls at the moment of the tap, while foreground.
+// A Scriptable request is not bound by browser mixed-content/CORS rules, which
+// is exactly why the PWA could not do this and this can.
 //
-// SECRETS: nothing is hardcoded. On first run the script prompts for camera IP,
-// user, password, snapshot path, and relay URL, and stores them in the iOS
-// Keychain (Scriptable's Keychain API). To re-run setup: long-press the script
-// in Scriptable and pass the argument "setup", or delete the keys.
+// CONFIG: `scripts/make-ipad-script.py` emits a pre-configured copy of this
+// file (gitignored) with CONFIG filled in, so nothing is typed on site. If
+// CONFIG is left blank, the script falls back to the iOS Keychain and prompts
+// once. This committed copy never contains credentials.
+//
+// RUN MODES (Scriptable "Parameter", or the Shortcut that calls it):
+//   ""          normal tap: capture -> weight
+//   "selftest"  checks every hop and reports PASS/FAIL in plain language
+//   "setup"     re-enter settings (Keychain mode only)
 // ---------------------------------------------------------------------------
 
-// ---- MD5 (Paul Johnston / blueimp core, public domain; ASCII/creds path) ----
+const CONFIG = {
+  base: "",        // e.g. "http://<camera-ip>"   (filled by make-ipad-script.py)
+  user: "",        // e.g. "admin"
+  pass: "",
+  path: "/ISAPI/Streaming/channels/101/picture",
+  relay: "https://<vercel-app-host>/api/donate",
+  location: "Cul2vate, Ellington Ag Center",
+  maxPixels: 1600, // longest edge sent upstream; keeps the tap fast on site WiFi
+};
+
+// ---- MD5 (Paul Johnston / blueimp core, public domain) ---------------------
 function md5(str) {
   function safeAdd(x, y){var lsw=(x&0xffff)+(y&0xffff);var msw=(x>>16)+(y>>16)+(lsw>>16);return (msw<<16)|(lsw&0xffff);}
   function rol(num,cnt){return (num<<cnt)|(num>>>(32-cnt));}
@@ -61,11 +71,9 @@ function md5(str) {
   return binl2hex(binlMD5(str2binl(str),str.length*8));
 }
 
-// ---- Digest header construction (RFC 2617, qop=auth) ----
+// ---- HTTP Digest (RFC 2617) ------------------------------------------------
 function parseAuthHeader(h) {
-  // h = 'Digest realm="...", qop="auth", nonce="...", opaque="...", algorithm=MD5'
-  var out = {};
-  var body = h.replace(/^Digest\s+/i, "");
+  var out = {}, body = String(h).replace(/^Digest\s+/i, "");
   var re = /(\w+)=(?:"([^"]*)"|([^,]*))/g, m;
   while ((m = re.exec(body)) !== null) out[m[1].toLowerCase()] = (m[2] !== undefined ? m[2] : m[3]).trim();
   return out;
@@ -73,131 +81,35 @@ function parseAuthHeader(h) {
 
 function buildDigestAuth(user, pass, method, uri, wwwAuth, cnonce, nc) {
   var p = parseAuthHeader(wwwAuth);
-  var realm = p.realm || "";
-  var nonce = p.nonce || "";
+  var realm = p.realm || "", nonce = p.nonce || "";
   var qop = p.qop ? p.qop.split(",")[0].trim() : "";
   var algorithm = (p.algorithm || "MD5").toUpperCase();
-
   var HA1 = md5(user + ":" + realm + ":" + pass);
   if (algorithm === "MD5-SESS") HA1 = md5(HA1 + ":" + nonce + ":" + cnonce);
   var HA2 = md5(method + ":" + uri);
-
-  var response;
-  if (qop === "auth" || qop === "auth-int") {
-    response = md5([HA1, nonce, nc, cnonce, qop, HA2].join(":"));
-  } else {
-    response = md5(HA1 + ":" + nonce + ":" + HA2);
-  }
-
-  var parts = [
-    'username="' + user + '"',
-    'realm="' + realm + '"',
-    'nonce="' + nonce + '"',
-    'uri="' + uri + '"',
-    'response="' + response + '"'
-  ];
+  var response = (qop === "auth" || qop === "auth-int")
+    ? md5([HA1, nonce, nc, cnonce, qop, HA2].join(":"))
+    : md5(HA1 + ":" + nonce + ":" + HA2);
+  var parts = ['username="'+user+'"', 'realm="'+realm+'"', 'nonce="'+nonce+'"',
+               'uri="'+uri+'"', 'response="'+response+'"'];
   if (p.algorithm) parts.push("algorithm=" + p.algorithm);
-  if (qop) { parts.push("qop=" + qop); parts.push("nc=" + nc); parts.push('cnonce="' + cnonce + '"'); }
+  if (qop) { parts.push("qop=" + qop); parts.push("nc=" + nc); parts.push('cnonce="'+cnonce+'"'); }
   if (p.opaque) parts.push('opaque="' + p.opaque + '"');
   return "Digest " + parts.join(", ");
 }
 
-// ---- Node test hook (skipped inside Scriptable) ----
+// Node test hook (skipped on-device)
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { md5: md5, parseAuthHeader: parseAuthHeader, buildDigestAuth: buildDigestAuth };
 }
 
 // ===========================================================================
-// Scriptable runtime (only executes on-device; skipped when required by Node)
+// Scriptable runtime
 // ===========================================================================
-async function main() {
-  const K = {
-    base: "aperture_cam_base",
-    user: "aperture_cam_user",
-    pass: "aperture_cam_pass",
-    path: "aperture_snapshot_path",
-    relay: "aperture_relay_url",
-    location: "aperture_location"
-  };
-
-  const arg = (typeof args !== "undefined" && args.shortcutParameter) || "";
-  const needSetup = arg === "setup" || !Keychain.contains(K.base) || !Keychain.contains(K.pass);
-  if (needSetup) await runSetup(K);
-
-  const base = Keychain.get(K.base).replace(/\/+$/, "");
-  const user = Keychain.get(K.user);
-  const pass = Keychain.get(K.pass);
-  const path = Keychain.contains(K.path) ? Keychain.get(K.path) : "/ISAPI/Streaming/channels/101/picture";
-  const relay = Keychain.get(K.relay);
-  const location = Keychain.contains(K.location) ? Keychain.get(K.location) : "Cul2vate, Ellington Ag Center";
-  const url = base + path;
-
-  // 1) unauthenticated GET -> expect 401 with WWW-Authenticate: Digest
-  const r1 = new Request(url);
-  r1.method = "GET";
-  await r1.load();
-  const status1 = r1.response.statusCode;
-
-  let imageData; // Data (JPEG bytes)
-  if (status1 === 200) {
-    imageData = r1.responseData;               // some firmwares allow basic/none
-  } else if (status1 === 401) {
-    const www = headerLookup(r1.response.headers, "www-authenticate");
-    if (!www || !/^Digest/i.test(www)) throw new Error("camera did not offer Digest auth: " + String(www));
-    const cnonce = uuidHex();
-    const nc = "00000001";
-    const authHeader = buildDigestAuth(user, pass, "GET", path, www, cnonce, nc);
-
-    const r2 = new Request(url);
-    r2.method = "GET";
-    r2.headers = { Authorization: authHeader };
-    imageData = await r2.load();               // JPEG bytes
-    if (r2.response.statusCode !== 200) throw new Error("auth GET failed: HTTP " + r2.response.statusCode);
-  } else {
-    throw new Error("camera GET unexpected HTTP " + status1);
-  }
-
-  const b64 = imageData.toBase64String();
-
-  // 2) POST the frame to the Vercel relay (relay injects the shared token to n8n)
-  const post = new Request(relay);
-  post.method = "POST";
-  post.headers = { "Content-Type": "application/json" };
-  post.body = JSON.stringify({
-    description: "",
-    image_b64: b64,
-    triggered_at: new Date().toISOString(),
-    location: location,
-    source: "aperture-ipad"
-  });
-  const result = await post.loadJSON();
-
-  await presentResult(result, post.response ? post.response.statusCode : 0);
-  Script.complete();
-}
-
-async function runSetup(K) {
-  const fields = [
-    ["Camera base URL", K.base, "http://<camera-ip>", false],
-    ["Camera username", K.user, "admin", false],
-    ["Camera password", K.pass, "", true],
-    ["Snapshot path", K.path, "/ISAPI/Streaming/channels/101/picture", false],
-    ["Relay URL", K.relay, "https://<vercel-app-host>/api/donate", false],
-    ["Location label", K.location, "Cul2vate, Ellington Ag Center", false]
-  ];
-  for (const [label, key, placeholder, secure] of fields) {
-    const a = new Alert();
-    a.title = "Aperture setup";
-    a.message = label;
-    const existing = Keychain.contains(key) ? Keychain.get(key) : placeholder;
-    if (secure) a.addSecureTextField(label, ""); else a.addTextField(label, existing);
-    a.addAction("Save");
-    await a.present();
-    const v = a.textFieldValue(0);
-    if (v && v.length) Keychain.set(key, v);
-    else if (!secure && !Keychain.contains(key)) Keychain.set(key, placeholder);
-  }
-}
+const KEYS = {
+  base: "aperture_cam_base", user: "aperture_cam_user", pass: "aperture_cam_pass",
+  path: "aperture_snapshot_path", relay: "aperture_relay_url", location: "aperture_location",
+};
 
 function headerLookup(headers, name) {
   const want = name.toLowerCase();
@@ -205,28 +117,206 @@ function headerLookup(headers, name) {
   return null;
 }
 
-function uuidHex() {
-  return UUID.string().replace(/-/g, "").toLowerCase().slice(0, 16);
+async function resolveConfig(mode) {
+  if (CONFIG.base && CONFIG.pass) return CONFIG;            // pre-configured build
+  if (mode === "setup") await runSetup();
+  for (const k of ["base", "user", "pass", "relay"]) {
+    if (!Keychain.contains(KEYS[k])) { await runSetup(); break; }
+  }
+  return {
+    base: Keychain.get(KEYS.base), user: Keychain.get(KEYS.user), pass: Keychain.get(KEYS.pass),
+    path: Keychain.contains(KEYS.path) ? Keychain.get(KEYS.path) : CONFIG.path,
+    relay: Keychain.get(KEYS.relay),
+    location: Keychain.contains(KEYS.location) ? Keychain.get(KEYS.location) : CONFIG.location,
+    maxPixels: CONFIG.maxPixels,
+  };
 }
 
-async function presentResult(result, httpStatus) {
+async function runSetup() {
+  const fields = [
+    ["Camera address", KEYS.base, "http://<camera-ip>", false],
+    ["Camera username", KEYS.user, "admin", false],
+    ["Camera password", KEYS.pass, "", true],
+    ["Snapshot path", KEYS.path, CONFIG.path, false],
+    ["Relay URL", KEYS.relay, CONFIG.relay, false],
+    ["Location label", KEYS.location, CONFIG.location, false],
+  ];
+  for (const [label, key, fallback, secure] of fields) {
+    const a = new Alert();
+    a.title = "Aperture setup";
+    a.message = label;
+    const existing = Keychain.contains(key) ? Keychain.get(key) : fallback;
+    if (secure) a.addSecureTextField(label, ""); else a.addTextField(label, existing);
+    a.addAction("Save");
+    await a.present();
+    const v = a.textFieldValue(0);
+    if (v && v.length) Keychain.set(key, v);
+    else if (!secure) Keychain.set(key, fallback);
+  }
+}
+
+// Pull one JPEG from the mounted camera over the LAN.
+async function grabFrame(cfg) {
+  const url = cfg.base.replace(/\/+$/, "") + cfg.path;
+
+  const probe = new Request(url);
+  probe.method = "GET";
+  probe.timeoutInterval = 20;
+  let probeData;
+  try {
+    probeData = await probe.load();
+  } catch (e) {
+    throw new Error(
+      "Can't reach the camera at " + cfg.base + ".\n\n" +
+      "Check the iPad is on the Cul2vate Wi-Fi, then tap again."
+    );
+  }
+
+  const status = probe.response.statusCode;
+  if (status === 200) return probeData;                     // no auth required
+  if (status !== 401) throw new Error("Camera replied HTTP " + status + " instead of a photo.");
+
+  const www = headerLookup(probe.response.headers, "www-authenticate");
+  if (!www || !/^Digest/i.test(String(www))) {
+    throw new Error("Camera did not offer Digest login (got: " + String(www) + ").");
+  }
+
+  const authed = new Request(url);
+  authed.method = "GET";
+  authed.timeoutInterval = 25;
+  authed.headers = {
+    Authorization: buildDigestAuth(cfg.user, cfg.pass, "GET", cfg.path, www,
+                                   UUID.string().replace(/-/g, "").toLowerCase().slice(0, 16), "00000001"),
+  };
+  const data = await authed.load();
+  const code = authed.response.statusCode;
+  if (code === 401) throw new Error("Camera rejected the saved password. Re-run setup with the correct admin password.");
+  if (code !== 200) throw new Error("Camera replied HTTP " + code + " on the authenticated request.");
+  return data;
+}
+
+// Shrink the 5MP frame so the upload is quick on site Wi-Fi.
+function shrink(data, maxPixels) {
+  try {
+    const img = Image.fromData(data);
+    if (!img) return data;
+    const longest = Math.max(img.size.width, img.size.height);
+    if (!longest || longest <= maxPixels) return data;
+    const scale = maxPixels / longest;
+    const ctx = new DrawContext();
+    ctx.size = new Size(Math.round(img.size.width * scale), Math.round(img.size.height * scale));
+    ctx.respectScreenScale = false;
+    ctx.drawImageInRect(img, new Rect(0, 0, ctx.size.width, ctx.size.height));
+    return Data.fromJPEG(ctx.getImage());
+  } catch (e) {
+    return data;                                            // never block a tap on resizing
+  }
+}
+
+async function postToRelay(cfg, b64, description) {
+  const post = new Request(cfg.relay);
+  post.method = "POST";
+  post.timeoutInterval = 120;
+  post.headers = { "Content-Type": "application/json" };
+  post.body = JSON.stringify({
+    description: description || "",
+    image_b64: b64,
+    triggered_at: new Date().toISOString(),
+    location: cfg.location,
+    source: "aperture-ipad",
+  });
+  const text = await post.loadString();
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) { throw new Error("Server sent an unreadable reply: " + String(text).slice(0, 200)); }
+  if (parsed && parsed.error) throw new Error(String(parsed.error));
+  return parsed;
+}
+
+async function showResult(result) {
   const t = new UITable();
   t.showSeparators = true;
   const head = t.addRow();
   head.isHeader = true;
-  const ok = result && (result.weight_lbs !== undefined && result.weight_lbs !== null);
-  head.addText(ok ? (Number(result.weight_lbs).toFixed(1) + " lbs") : (result && result.error ? "Failed" : "Logged"));
-  const add = (k, v) => { const r = t.addRow(); r.addText(String(k)); r.addText(v === undefined || v === null ? "—" : String(v)); };
-  if (result) {
-    add("Item", result.item_type);
-    if (result.confidence !== undefined && result.confidence !== null) add("Confidence", Math.round(result.confidence * 100) + "%");
-    add("ChArUco", result.charuco_detected ? "calibrated" : "fallback");
-    if (result.farmbrite_id) add("Farmbrite", "#" + result.farmbrite_id);
-    if (result.error) add("Error", result.error);
-    if (result.raw) add("Raw", result.raw);
-  }
-  add("HTTP", httpStatus);
+  head.height = 70;
+  const hasWeight = result && typeof result.weight_lbs === "number";
+  head.addText(hasWeight ? result.weight_lbs.toFixed(1) + " lbs" : "Logged");
+  const add = (k, v) => { const r = t.addRow(); r.addText(String(k)); r.addText(v == null ? "—" : String(v)); };
+  add("Item", result.item_type);
+  if (typeof result.confidence === "number") add("Confidence", Math.round(result.confidence * 100) + "%");
+  add("Scale reference", result.charuco_detected ? "calibrated board" : "fallback");
+  if (result.notes) add("Notes", result.notes);
   await t.present();
 }
 
-if (typeof Keychain !== "undefined") { main().catch((e) => { logError(e); const a = new Alert(); a.title = "Aperture error"; a.message = String(e && e.message ? e.message : e); a.addAction("OK"); a.present(); }); }
+async function showError(message) {
+  const a = new Alert();
+  a.title = "Couldn't log this donation";
+  a.message = String(message);
+  a.addAction("OK");
+  await a.present();
+}
+
+// One tap that proves every hop, in plain language.
+async function selfTest(cfg) {
+  const steps = [];
+  const t = new UITable();
+  const render = () => {
+    t.removeAllRows();
+    const h = t.addRow(); h.isHeader = true; h.addText("Aperture self-test");
+    for (const s of steps) { const r = t.addRow(); r.addText(s.ok ? "✅ " + s.name : "❌ " + s.name); r.addText(s.detail || ""); }
+    t.reload();
+  };
+  await t.present(false);
+
+  let frame = null;
+  try {
+    frame = await grabFrame(cfg);
+    steps.push({ ok: true, name: "Camera reachable + password accepted", detail: Math.round(frame.toBase64String().length / 1024) + " KB" });
+  } catch (e) {
+    steps.push({ ok: false, name: "Camera", detail: String(e.message).split("\n")[0] });
+    render();
+    return steps;
+  }
+  render();
+
+  const small = shrink(frame, cfg.maxPixels);
+  steps.push({ ok: true, name: "Photo prepared for upload", detail: Math.round(small.toBase64String().length / 1024) + " KB" });
+  render();
+
+  try {
+    const res = await postToRelay(cfg, small.toBase64String(), "SELF-TEST — ignore this row");
+    const ok = res && (typeof res.weight_lbs === "number" || res.item_type);
+    steps.push({ ok: ok, name: "Weight came back + row logged",
+                 detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
+  } catch (e) {
+    steps.push({ ok: false, name: "Server", detail: String(e.message).slice(0, 90) });
+  }
+  render();
+
+  const allOk = steps.every((s) => s.ok);
+  steps.push({ ok: allOk, name: allOk ? "ALL GOOD — ready for volunteers" : "NOT READY — see the ❌ above", detail: "" });
+  render();
+  return steps;
+}
+
+async function main() {
+  const mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "").toString().trim().toLowerCase();
+  const cfg = await resolveConfig(mode);
+
+  if (mode === "selftest") { await selfTest(cfg); Script.complete(); return; }
+
+  const frame = await grabFrame(cfg);
+  const small = shrink(frame, cfg.maxPixels);
+  const result = await postToRelay(cfg, small.toBase64String(), "");
+  await showResult(result);
+  Script.complete();
+}
+
+if (typeof Keychain !== "undefined") {
+  main().catch(async (e) => {
+    logError(e);
+    await showError(e && e.message ? e.message : e);
+    Script.complete();
+  });
+}

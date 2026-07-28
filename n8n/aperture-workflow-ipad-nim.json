@@ -1,0 +1,1592 @@
+{
+  "updatedAt": "2026-07-28T22:56:37.897Z",
+  "createdAt": "2025-09-18T17:21:57.279Z",
+  "id": "<n8n-workflow-id>",
+  "name": "Aperture: Cul2vate Donation Logger",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\":\"invalid token\"}",
+        "options": {}
+      },
+      "id": "d698da79-d7e9-4641-9c3d-47b3967d1a0a",
+      "name": "Respond ",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -3056,
+        3888
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"prompt_version\": \"v0.4-nim\",\n  \"model\": \"meta/llama-3.2-90b-vision-instruct\",\n  \"vision_endpoint\": \"https://integrate.api.nvidia.com/v1/chat/completions\"\n}",
+        "options": {}
+      },
+      "id": "dc17db35-7fbb-4f34-95c7-a445ad5084b6",
+      "name": "Load prompt + config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3056,
+        3664
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aperture-donate",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "676dcd54-1395-4714-88f9-498196ae48a2",
+      "name": "Webhook: donation button",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -3504,
+        3744
+      ],
+      "webhookId": "aperture-donate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.headers['x-aperture-token'] }}",
+              "rightValue": "=REDACTED-see-SECRETS.local.md",
+              "id": "f64a3cc4-b14a-46ad-b462-16fd55bf08e1"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6a840a83-87e7-4a2c-89be-fe403a564623",
+      "name": "Verify Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3280,
+        3744
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the NVIDIA NIM vision request from the frame the iPad posted.\n// The iPad pulls the mounted Hikvision over the Cul2vate LAN at tap time and\n// sends it here as `image_b64` \u2014 there is no bridge/tunnel in the path.\n// Also emits the scale_* fields the parse node expects (null until scale OCR ships).\nconst SYSTEM_PROMPT = \"You are Aperture's vision component for Cul2vate's loading dock camera at Ellington Ag Center.\\n\\nCRITICAL: The schema below describes TYPES and RULES only. It contains NO real values.\\nNever copy a number, item name, or container name out of this prompt. Every value you\\noutput must be derived from what you actually see in THIS image. If you find yourself\\nabout to emit a number that appears in these instructions, you are wrong - re-look.\\n\\nReturn ONLY a JSON object with exactly these keys - no markdown, no code fences, no prose:\\n\\n{\\n  \\\"item_type\\\": <string: what you actually see, or \\\"empty\\\" if the zone has no donation>,\\n  \\\"container_type\\\": <string: one of banana-box-standard | milk-crate-standard | bread-tray-plastic | 5gal-bucket-empty | pallet-wood-48x40 | cardboard-box-small | cardboard-box-medium | cardboard-box-large | reusable-shopping-bag | produce-mesh-bag-50lb | no-container-loose | unknown>,\\n  \\\"inside_zone\\\": <boolean>,\\n  \\\"charuco_detected\\\": <boolean>,\\n  \\\"pixels_per_inch\\\": <number or null>,\\n  \\\"estimated_volume_cu_in\\\": <number or null>,\\n  \\\"estimated_density_lbs_per_cu_in\\\": <number or null>,\\n  \\\"weight_lbs\\\": <number or null>,\\n  \\\"weight_lbs_low\\\": <number or null>,\\n  \\\"weight_lbs_high\\\": <number or null>,\\n  \\\"confidence\\\": <number 0..1>,\\n  \\\"known_failure_flags\\\": <array of strings>,\\n  \\\"notes\\\": <string, one short sentence>\\n}\\n\\nCAMERA GEOMETRY (fixed - do not doubt):\\n- Hikvision AcuSense <device-serial>, 5MP, varifocal fixed at install time.\\n- Mounted high on a brick wall, diagonal downward view.\\n- A 6ft x 6ft yellow-taped staging zone on the floor, 20-40 ft from the camera.\\n- A 36\\\"x44\\\" Dibond ChArUco board on the wall: 32\\\"x40\\\" checkerboard, 6\\\" squares, 2\\\" white border.\\n\\nPROCEDURE:\\n1. FIRST decide whether the staging zone actually contains a donation.\\n   - Zone visible and EMPTY (bare floor/pallet, no goods): inside_zone=true,\\n     item_type=\\\"empty\\\", container_type=\\\"no-container-loose\\\", weight_lbs=0,\\n     weight_lbs_low=0, weight_lbs_high=0, confidence>=0.9. STOP - do not estimate.\\n   - Goods present but clearly OUTSIDE the tape: inside_zone=false, weight_lbs=null,\\n     notes=\\\"outside staging zone - reposition\\\".\\n   - Cannot see the zone at all: inside_zone=false, weight_lbs=null, add \\\"zone_not_visible\\\".\\n2. Only if goods ARE in the zone: detect the ChArUco board. If you can genuinely count\\n   squares, charuco_detected=true and compute pixels_per_inch from the 6\\\" squares.\\n   Otherwise charuco_detected=false, fall back to pallet scale (48\\\"x40\\\"), and reduce\\n   confidence by 0.15.\\n3. Classify item_type from what is visibly present.\\n4. Classify container_type from the enum above; \\\"no-container-loose\\\" if goods sit\\n   directly on the floor/pallet.\\n5. Estimate volume from the floor-plane footprint times visible stack height.\\n6. Apply a density prior appropriate to the item you identified (leafy produce is far\\n   lighter per volume than canned goods or frozen meat).\\n7. weight_lbs is your best single estimate; weight_lbs_low/high bracket your uncertainty.\\n   These must be three DIFFERENT numbers you computed, not fixed values.\\n8. confidence is calibrated: 0.95 = \\\"within 10%\\\", 0.5 = \\\"could be off by half\\\".\\n\\nFAILURE FLAGS (use only when they apply): partial_occlusion, mixed_items,\\nsevere_perspective, low_light, glare_or_shadow, oversized, ambiguous_container,\\nzone_not_visible.\\n\\nHARD CONSTRAINTS:\\n- Never invent items you cannot see.\\n- Never hallucinate ChArUco detection.\\n- Never return narrative outside the JSON. A single JSON object only.\";\n\nconst body = $('Webhook: donation button').first().json.body || {};\nconst config = $('Load prompt + config').first().json;\n\nlet b64 = body.image_b64;\nif (typeof b64 !== 'string' || b64.length < 1000) {\n  throw new Error('No usable image_b64 in the tap payload. The iPad must capture the camera frame before posting (got ' + (b64 ? b64.length + ' chars' : 'nothing') + ').');\n}\n// Tolerate a data-URL prefix as well as bare base64.\nb64 = b64.replace(/^data:image\\/[a-zA-Z]+;base64,/, '');\n\nconst context = [\n  '', '', 'Context for THIS donation:',\n  'description: ' + (body.description || '\u2014'),\n  'location: ' + (body.location || '\u2014'),\n  'triggered_at: ' + (body.triggered_at || new Date().toISOString()),\n  'eval_mode: false', '', 'Return the JSON object now.'\n].join('\\n');\n\nreturn [{ json: {\n  nim_body: {\n    model: config.model,\n    messages: [{ role: 'user', content: [\n      { type: 'text', text: SYSTEM_PROMPT + context },\n      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } }\n    ]}],\n    max_tokens: 800,\n    temperature: 0,\n    // Mandatory: without it the model emits prose + a code fence and the\n    // parse node throws 'Vision returned non-JSON'. [VERIFIED 2026-07-22]\n    response_format: { type: 'json_object' }\n  },\n  image_chars: b64.length,\n  scale_reading_lbs: null,\n  scale_confidence: null,\n  scale_stable: false,\n  scale_raw_text: null\n}}];"
+      },
+      "id": "f2a091e8-2611-4769-84c3-b1908847fcec",
+      "name": "Build vision request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2608,
+        3664
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.nim_body) }}",
+        "options": {
+          "timeout": 35000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b34d1cab-0d36-4282-b0ff-2faba788e7ff",
+      "name": "Vision: weight estimate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2400,
+        3664
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<n8n-id>",
+          "name": "NVIDIA NIM (Aperture)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse vision JSON, subtract container tare (from data/containers.json),\n// then apply bias-table multiplier (learned). Merge with trigger payload.\n\n// \u2500\u2500 Static container lookup (mirror of data/containers.json \u2014 edit both\n// places together, or refactor to fetch from Vercel in a future revision). \u2500\u2500\nconst CONTAINERS = {\n  'banana-box-standard':      { tare_lbs: 3.2,  keywords: ['banana box','chiquita','dole','produce box'] },\n  'milk-crate-standard':      { tare_lbs: 4.1,  keywords: ['milk crate','dairy crate'] },\n  'bread-tray-plastic':       { tare_lbs: 2.8,  keywords: ['bread tray','bakery tray'] },\n  '5gal-bucket-empty':        { tare_lbs: 2.2,  keywords: ['5 gallon bucket','five gallon','bucket'] },\n  'pallet-wood-48x40':        { tare_lbs: 35.0, keywords: ['pallet','wooden pallet','gma pallet'] },\n  'cardboard-box-small':      { tare_lbs: 0.8,  keywords: ['small cardboard box','small box'] },\n  'cardboard-box-medium':     { tare_lbs: 1.6,  keywords: ['medium cardboard box','medium box'] },\n  'cardboard-box-large':      { tare_lbs: 2.8,  keywords: ['large cardboard box','large box','shipping box'] },\n  'reusable-shopping-bag':    { tare_lbs: 0.3,  keywords: ['reusable bag','shopping bag','grocery bag'] },\n  'produce-mesh-bag-50lb':    { tare_lbs: 0.15, keywords: ['mesh bag','onion bag','potato bag'] },\n  'no-container-loose':       { tare_lbs: 0.0,  keywords: ['loose','no container','bare','directly on floor'] }\n};\n\nfunction resolveContainer(visionResponse) {\n  // Exact match on container_type key\n  const key = (visionResponse.container_type || '').toLowerCase().trim();\n  if (CONTAINERS[key]) return { key, ...CONTAINERS[key] };\n  // Substring match across item_type + notes + container_type\n  const haystack = [\n    visionResponse.container_type || '',\n    visionResponse.item_type || '',\n    visionResponse.notes || ''\n  ].join(' ').toLowerCase();\n  for (const [k, def] of Object.entries(CONTAINERS)) {\n    for (const kw of def.keywords) {\n      if (haystack.includes(kw)) return { key: k, ...def };\n    }\n  }\n  // Unmatched \u2014 no tare subtraction, log the raw classification\n  return { key: visionResponse.container_type || 'unknown', tare_lbs: 0.0, unmatched: true };\n}\n\n// \u2500\u2500 Parse vision JSON \u2500\u2500\n// NIM (HTTP) returns choices[0].message.content; the older langchain node\n// returned message.content / content. Accept all shapes.\nlet raw = $json.choices?.[0]?.message?.content ?? $json.message?.content ?? $json.content ?? $json;\n// Defensive: strip ```json fences if a model ever wraps its output.\nif (typeof raw === 'string') {\n  raw = raw.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/, '').trim();\n}\nlet vision;\ntry {\n  vision = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (e) {\n  throw new Error('Vision returned non-JSON: ' + String(raw).slice(0, 300));\n}\n\nconst trigger = $('Webhook: donation button').first().json.body || {};\nconst config = $('Load prompt + config').first().json;\nconst bridge = $('Build vision request').first().json || {};\n\n// Bias table and learned densities \u2014 not wired in v1, default to empty.\n// When Vercel serves /bias-table.json and /learned-densities.json, plug them\n// in here via additional HTTP Request nodes + $('<name>').first().json.\nconst biasTable = {};\nconst densTable = {};\n\n// \u2500\u2500 Layer 1: container tare subtraction (deterministic) \u2500\u2500\nconst container = resolveContainer(vision);\nconst rawWeight = vision.weight_lbs;\nconst netWeight = (typeof rawWeight === 'number')\n  ? Math.max(0, rawWeight - container.tare_lbs)\n  : null;\n\n// \u2500\u2500 Layer 2: learned density override (if available for this item_type) \u2500\u2500\nconst densKey = (vision.item_type || '').toLowerCase().trim();\nconst dens = densTable[densKey];\nlet densityOverrideApplied = false;\nlet weightFromLearnedDensity = null;\nif (dens && dens.using_learned && vision.estimated_volume_cu_in) {\n  weightFromLearnedDensity = Math.max(0, vision.estimated_volume_cu_in * dens.density_lbs_per_cu_in_mean);\n  densityOverrideApplied = true;\n}\n\n// \u2500\u2500 Layer 3: bias multiplier from residual history \u2500\u2500\nconst biasKey = densKey;\nconst multiplier = (biasTable && biasTable[biasKey] && typeof biasTable[biasKey] === 'number') ? biasTable[biasKey] : 1.0;\nconst preBiasWeight = weightFromLearnedDensity !== null ? weightFromLearnedDensity : netWeight;\nconst adjustedWeight = (preBiasWeight !== null) ? preBiasWeight * multiplier : null;\n\n// \u2500\u2500 Ground truth from scale OCR (deterministic, passes through to Sheet) \u2500\u2500\nconst scaleReading = (typeof bridge.scale_reading_lbs === 'number' && bridge.scale_stable === true)\n  ? bridge.scale_reading_lbs : null;\nconst residualVsScale = (scaleReading !== null && adjustedWeight !== null)\n  ? adjustedWeight - scaleReading : null;\n\nreturn [{ json: {\n  ...vision,\n  donation_id: trigger.donation_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),\n  container_type: container.key,\n  tare_lbs: container.tare_lbs,\n  container_unmatched: container.unmatched === true,\n  weight_lbs_raw: rawWeight,\n  weight_lbs_net: netWeight,\n  weight_lbs_from_learned_density: weightFromLearnedDensity,\n  weight_lbs: adjustedWeight,\n  density_override_applied: densityOverrideApplied,\n  density_used: dens ? dens.density_lbs_per_cu_in_mean : null,\n  density_source: dens && dens.using_learned ? 'learned' : 'model',\n  bias_multiplier: multiplier,\n  bias_applied: multiplier !== 1.0,\n  scale_reading_lbs: scaleReading,\n  scale_confidence: bridge.scale_confidence ?? null,\n  true_weight_lbs: scaleReading,\n  ground_truth_source: scaleReading !== null ? 'scale_ocr' : null,\n  residual_vs_scale_lbs: residualVsScale,\n  description: trigger.description ?? null,\n  location: trigger.location ?? null,\n  triggered_at: trigger.triggered_at ?? new Date().toISOString(),\n  prompt_version: config.prompt_version,\n  model: config.model\n}}];"
+      },
+      "id": "6416ce9d-bb1a-479e-a5fd-35ddeeabe0fd",
+      "name": "Parse vision + tare + bias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        3664
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.inside_zone === true && typeof $json.weight_lbs === 'number' }}",
+              "id": "85391323-a278-4c60-9a2e-eea22cec0b63"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "46a637d3-dfaa-41da-ac57-a95f82976f1c",
+      "name": "Guard: inside zone + has weight",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1936,
+        3664
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "=<google-sheet-id>",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Donations",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "triggered_at": "={{ $json.triggered_at }}",
+            "location": "={{ $json.location || '' }}",
+            "description": "={{ $json.description || '' }}",
+            "item_type": "={{ $json.item_type || '' }}",
+            "inside_zone": "={{ $json.inside_zone }}",
+            "charuco_detected": "={{ $json.charuco_detected }}",
+            "weight_lbs": "={{ $json.weight_lbs }}",
+            "weight_lbs_raw": "={{ $json.weight_lbs_raw }}",
+            "weight_lbs_low": "={{ $json.weight_lbs_low }}",
+            "weight_lbs_high": "={{ $json.weight_lbs_high }}",
+            "bias_multiplier": "={{ $json.bias_multiplier }}",
+            "confidence": "={{ $json.confidence }}",
+            "known_failure_flags": "={{ ($json.known_failure_flags || []).join(',') }}",
+            "notes": "={{ $json.notes || '' }}",
+            "prompt_version": "={{ $json.prompt_version }}",
+            "model": "={{ $json.model }}",
+            "container_type": "={{ $json.container_type || '' }}",
+            "tare_lbs": "={{ $json.tare_lbs }}",
+            "donation_id": "={{ $json.donation_id }}",
+            "scale_reading_lbs": "={{ $json.scale_reading_lbs }}",
+            "scale_confidence": "={{ $json.scale_confidence }}",
+            "true_weight_lbs": "={{ $json.true_weight_lbs }}",
+            "ground_truth_source": "={{ $json.ground_truth_source || '' }}",
+            "residual_vs_scale_lbs": "={{ $json.residual_vs_scale_lbs }}",
+            "density_used": "={{ $json.density_used }}",
+            "density_source": "={{ $json.density_source }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "triggered_at",
+              "displayName": "triggered_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "donation_id",
+              "displayName": "donation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "item_type",
+              "displayName": "item_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "container_type",
+              "displayName": "container_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tare_lbs",
+              "displayName": "tare_lbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "inside_zone",
+              "displayName": "inside_zone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "charuco_detected",
+              "displayName": "charuco_detected",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weight_lbs",
+              "displayName": "weight_lbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weight_lbs_raw",
+              "displayName": "weight_lbs_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weight_lbs_low",
+              "displayName": "weight_lbs_low",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "weight_lbs_high",
+              "displayName": "weight_lbs_high",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bias_multiplier",
+              "displayName": "bias_multiplier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "density_used",
+              "displayName": "density_used",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "density_source",
+              "displayName": "density_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scale_reading_lbs",
+              "displayName": "scale_reading_lbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scale_confidence",
+              "displayName": "scale_confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "true_weight_lbs",
+              "displayName": "true_weight_lbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ground_truth_source",
+              "displayName": "ground_truth_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "residual_vs_scale_lbs",
+              "displayName": "residual_vs_scale_lbs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "known_failure_flags",
+              "displayName": "known_failure_flags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prompt_version",
+              "displayName": "prompt_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "cced043a-77ef-42cf-888b-ce812310616c",
+      "name": "Append to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1936,
+        3856
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<n8n-credential-id>",
+          "name": "Google Sheets OAuth2 API"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Fire-and-forget. Fails silently if Google creds aren't wired yet."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ !!($env.FARMBRITE_API_BASE && $env.FARMBRITE_INVENTORY_TYPE_ID && $env.FARMBRITE_LOCATION_ID) }}",
+              "id": "a9701c1b-e178-4cb0-962b-cce5e40ed2e3"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1be6df10-45de-4e13-976d-0b9ed37344cb",
+      "name": "Guard: Farmbrite configured",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1696,
+        3456
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Zone-miss or null-weight: respond without writing to Farmbrite.\nconst v = $json;\nreturn [{ json: {\n  weight_lbs: null,\n  weight_residual_est: null,\n  item_type: v.item_type ?? null,\n  confidence: v.confidence ?? null,\n  charuco_detected: v.charuco_detected ?? false,\n  farmbrite_id: null,\n  notes: v.notes ?? (v.inside_zone === false ? 'Outside the yellow zone \u2014 reposition and retry.' : 'Could not estimate weight.')\n}}];"
+      },
+      "id": "70b8bcde-2bde-4f47-a041-5161d19f4d25",
+      "name": "Shape response (skipped)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1696,
+        3776
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Farmbrite not configured \u2014 pass the parsed vision through so the PWA\n// still shows weight + item + confidence, but farmbrite_id stays null.\nreturn [{ json: { __farmbrite_skipped: true } }];"
+      },
+      "id": "dc75a891-2af6-49dc-8f84-0d39dc67d426",
+      "name": "Farmbrite skipped (pending key)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        3616
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "830b230e-207f-4d1a-8906-bdb7abc7ae11",
+      "name": "Respond (skipped)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1456,
+        3776
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unified response shape for the PWA.\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst fb = $json;\nconst farmbriteSkipped = fb?.__farmbrite_skipped === true;\nconst farmbriteId = farmbriteSkipped ? null : (fb?.id ?? fb?.uuid ?? fb?._id ?? null);\n\nconst residualEst = (parsed.weight_lbs_high != null && parsed.weight_lbs_low != null)\n  ? (parsed.weight_lbs_high - parsed.weight_lbs_low) / 2\n  : null;\n\nlet notes = parsed.notes ?? null;\nif (farmbriteSkipped) {\n  notes = (notes ? notes + ' \u00b7 ' : '') + 'Farmbrite pending (no API key yet); execution logged in n8n history.';\n}\n\nreturn [{ json: {\n  weight_lbs: parsed.weight_lbs ?? null,\n  weight_residual_est: residualEst,\n  item_type: parsed.item_type ?? null,\n  confidence: parsed.confidence ?? null,\n  charuco_detected: parsed.charuco_detected ?? false,\n  farmbrite_id: farmbriteId,\n  farmbrite_pending: farmbriteSkipped,\n  notes\n}}];"
+      },
+      "id": "52dca442-14fd-4b38-9e15-cebab81e3fe5",
+      "name": "Shape response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1216,
+        3536
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "2d501709-1a42-4909-baa6-67ef067f9434",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -976,
+        3536
+      ]
+    }
+  ],
+  "connections": {
+    "Load prompt + config": {
+      "main": [
+        [
+          {
+            "node": "Build vision request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: donation button": {
+      "main": [
+        [
+          {
+            "node": "Verify Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Token": {
+      "main": [
+        [
+          {
+            "node": "Load prompt + config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vision: weight estimate": {
+      "main": [
+        [
+          {
+            "node": "Parse vision + tare + bias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse vision + tare + bias": {
+      "main": [
+        [
+          {
+            "node": "Guard: inside zone + has weight",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: inside zone + has weight": {
+      "main": [
+        [
+          {
+            "node": "Farmbrite skipped (pending key)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape response (skipped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: Farmbrite configured": {
+      "main": [
+        [],
+        []
+      ]
+    },
+    "Shape response (skipped)": {
+      "main": [
+        [
+          {
+            "node": "Respond (skipped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Farmbrite skipped (pending key)": {
+      "main": [
+        [
+          {
+            "node": "Shape response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape response": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build vision request": {
+      "main": [
+        [
+          {
+            "node": "Vision: weight estimate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {
+    "Webhook: donation button": [
+      {
+        "json": {
+          "headers": {
+            "host": "<n8n-host>",
+            "user-agent": "curl/8.7.1",
+            "content-length": "91",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "45.16.9.147",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "9ed8552a2edfb229-ATL",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "x-aperture-token": "REDACTED-see-SECRETS.local.md",
+            "x-forwarded-for": "45.16.9.147, 108.162.238.150",
+            "x-forwarded-host": "<n8n-host>",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-41-54894b8556-7bxhp",
+            "x-is-trusted": "yes",
+            "x-real-ip": "45.16.9.147"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "description": "smoke test v2",
+            "location": "Cul2vate",
+            "triggered_at": "2026-04-17T03:30:00Z"
+          },
+          "webhookUrl": "https://<n8n-host>/webhook/aperture-donate",
+          "executionMode": "production"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "versionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+  "activeVersionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+  "versionCounter": 100,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "shared": [
+    {
+      "updatedAt": "2025-09-18T17:21:57.288Z",
+      "createdAt": "2025-09-18T17:21:57.288Z",
+      "role": "workflow:owner",
+      "workflowId": "<n8n-workflow-id>",
+      "projectId": "<n8n-id>",
+      "project": {
+        "updatedAt": "2025-10-30T14:00:44.000Z",
+        "createdAt": "2025-05-30T00:32:49.615Z",
+        "id": "<n8n-id>",
+        "name": "Main",
+        "type": "team",
+        "icon": {
+          "type": "icon",
+          "value": "chart-bar"
+        },
+        "description": "",
+        "customTelemetryTags": [],
+        "creatorId": null
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-04-17T02:34:06.495Z",
+      "createdAt": "2026-04-17T02:34:06.495Z",
+      "id": "<n8n-id>",
+      "name": "Cul2vate"
+    },
+    {
+      "updatedAt": "2026-04-17T02:34:06.449Z",
+      "createdAt": "2026-04-17T02:34:06.449Z",
+      "id": "<n8n-id>",
+      "name": "Aperture"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-07-28T22:56:37.898Z",
+    "createdAt": "2026-07-28T22:56:37.898Z",
+    "versionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+    "workflowId": "<n8n-workflow-id>",
+    "nodes": [
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\"error\":\"invalid token\"}",
+          "options": {}
+        },
+        "id": "d698da79-d7e9-4641-9c3d-47b3967d1a0a",
+        "name": "Respond ",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          -3056,
+          3888
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "raw",
+          "jsonOutput": "{\n  \"prompt_version\": \"v0.4-nim\",\n  \"model\": \"meta/llama-3.2-90b-vision-instruct\",\n  \"vision_endpoint\": \"https://integrate.api.nvidia.com/v1/chat/completions\"\n}",
+          "options": {}
+        },
+        "id": "dc17db35-7fbb-4f34-95c7-a445ad5084b6",
+        "name": "Load prompt + config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -3056,
+          3664
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "aperture-donate",
+          "responseMode": "responseNode",
+          "options": {
+            "rawBody": false
+          }
+        },
+        "id": "676dcd54-1395-4714-88f9-498196ae48a2",
+        "name": "Webhook: donation button",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -3504,
+          3744
+        ],
+        "webhookId": "aperture-donate"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 1
+            },
+            "conditions": [
+              {
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                },
+                "leftValue": "={{ $json.headers['x-aperture-token'] }}",
+                "rightValue": "=REDACTED-see-SECRETS.local.md",
+                "id": "f64a3cc4-b14a-46ad-b462-16fd55bf08e1"
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "6a840a83-87e7-4a2c-89be-fe403a564623",
+        "name": "Verify Token",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          -3280,
+          3744
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Build the NVIDIA NIM vision request from the frame the iPad posted.\n// The iPad pulls the mounted Hikvision over the Cul2vate LAN at tap time and\n// sends it here as `image_b64` \u2014 there is no bridge/tunnel in the path.\n// Also emits the scale_* fields the parse node expects (null until scale OCR ships).\nconst SYSTEM_PROMPT = \"You are Aperture's vision component for Cul2vate's loading dock camera at Ellington Ag Center.\\n\\nCRITICAL: The schema below describes TYPES and RULES only. It contains NO real values.\\nNever copy a number, item name, or container name out of this prompt. Every value you\\noutput must be derived from what you actually see in THIS image. If you find yourself\\nabout to emit a number that appears in these instructions, you are wrong - re-look.\\n\\nReturn ONLY a JSON object with exactly these keys - no markdown, no code fences, no prose:\\n\\n{\\n  \\\"item_type\\\": <string: what you actually see, or \\\"empty\\\" if the zone has no donation>,\\n  \\\"container_type\\\": <string: one of banana-box-standard | milk-crate-standard | bread-tray-plastic | 5gal-bucket-empty | pallet-wood-48x40 | cardboard-box-small | cardboard-box-medium | cardboard-box-large | reusable-shopping-bag | produce-mesh-bag-50lb | no-container-loose | unknown>,\\n  \\\"inside_zone\\\": <boolean>,\\n  \\\"charuco_detected\\\": <boolean>,\\n  \\\"pixels_per_inch\\\": <number or null>,\\n  \\\"estimated_volume_cu_in\\\": <number or null>,\\n  \\\"estimated_density_lbs_per_cu_in\\\": <number or null>,\\n  \\\"weight_lbs\\\": <number or null>,\\n  \\\"weight_lbs_low\\\": <number or null>,\\n  \\\"weight_lbs_high\\\": <number or null>,\\n  \\\"confidence\\\": <number 0..1>,\\n  \\\"known_failure_flags\\\": <array of strings>,\\n  \\\"notes\\\": <string, one short sentence>\\n}\\n\\nCAMERA GEOMETRY (fixed - do not doubt):\\n- Hikvision AcuSense <device-serial>, 5MP, varifocal fixed at install time.\\n- Mounted high on a brick wall, diagonal downward view.\\n- A 6ft x 6ft yellow-taped staging zone on the floor, 20-40 ft from the camera.\\n- A 36\\\"x44\\\" Dibond ChArUco board on the wall: 32\\\"x40\\\" checkerboard, 6\\\" squares, 2\\\" white border.\\n\\nPROCEDURE:\\n1. FIRST decide whether the staging zone actually contains a donation.\\n   - Zone visible and EMPTY (bare floor/pallet, no goods): inside_zone=true,\\n     item_type=\\\"empty\\\", container_type=\\\"no-container-loose\\\", weight_lbs=0,\\n     weight_lbs_low=0, weight_lbs_high=0, confidence>=0.9. STOP - do not estimate.\\n   - Goods present but clearly OUTSIDE the tape: inside_zone=false, weight_lbs=null,\\n     notes=\\\"outside staging zone - reposition\\\".\\n   - Cannot see the zone at all: inside_zone=false, weight_lbs=null, add \\\"zone_not_visible\\\".\\n2. Only if goods ARE in the zone: detect the ChArUco board. If you can genuinely count\\n   squares, charuco_detected=true and compute pixels_per_inch from the 6\\\" squares.\\n   Otherwise charuco_detected=false, fall back to pallet scale (48\\\"x40\\\"), and reduce\\n   confidence by 0.15.\\n3. Classify item_type from what is visibly present.\\n4. Classify container_type from the enum above; \\\"no-container-loose\\\" if goods sit\\n   directly on the floor/pallet.\\n5. Estimate volume from the floor-plane footprint times visible stack height.\\n6. Apply a density prior appropriate to the item you identified (leafy produce is far\\n   lighter per volume than canned goods or frozen meat).\\n7. weight_lbs is your best single estimate; weight_lbs_low/high bracket your uncertainty.\\n   These must be three DIFFERENT numbers you computed, not fixed values.\\n8. confidence is calibrated: 0.95 = \\\"within 10%\\\", 0.5 = \\\"could be off by half\\\".\\n\\nFAILURE FLAGS (use only when they apply): partial_occlusion, mixed_items,\\nsevere_perspective, low_light, glare_or_shadow, oversized, ambiguous_container,\\nzone_not_visible.\\n\\nHARD CONSTRAINTS:\\n- Never invent items you cannot see.\\n- Never hallucinate ChArUco detection.\\n- Never return narrative outside the JSON. A single JSON object only.\";\n\nconst body = $('Webhook: donation button').first().json.body || {};\nconst config = $('Load prompt + config').first().json;\n\nlet b64 = body.image_b64;\nif (typeof b64 !== 'string' || b64.length < 1000) {\n  throw new Error('No usable image_b64 in the tap payload. The iPad must capture the camera frame before posting (got ' + (b64 ? b64.length + ' chars' : 'nothing') + ').');\n}\n// Tolerate a data-URL prefix as well as bare base64.\nb64 = b64.replace(/^data:image\\/[a-zA-Z]+;base64,/, '');\n\nconst context = [\n  '', '', 'Context for THIS donation:',\n  'description: ' + (body.description || '\u2014'),\n  'location: ' + (body.location || '\u2014'),\n  'triggered_at: ' + (body.triggered_at || new Date().toISOString()),\n  'eval_mode: false', '', 'Return the JSON object now.'\n].join('\\n');\n\nreturn [{ json: {\n  nim_body: {\n    model: config.model,\n    messages: [{ role: 'user', content: [\n      { type: 'text', text: SYSTEM_PROMPT + context },\n      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } }\n    ]}],\n    max_tokens: 800,\n    temperature: 0,\n    // Mandatory: without it the model emits prose + a code fence and the\n    // parse node throws 'Vision returned non-JSON'. [VERIFIED 2026-07-22]\n    response_format: { type: 'json_object' }\n  },\n  image_chars: b64.length,\n  scale_reading_lbs: null,\n  scale_confidence: null,\n  scale_stable: false,\n  scale_raw_text: null\n}}];"
+        },
+        "id": "f2a091e8-2611-4769-84c3-b1908847fcec",
+        "name": "Build vision request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -2608,
+          3664
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.nim_body) }}",
+          "options": {
+            "timeout": 35000,
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "id": "b34d1cab-0d36-4282-b0ff-2faba788e7ff",
+        "name": "Vision: weight estimate",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -2400,
+          3664
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<n8n-id>",
+            "name": "NVIDIA NIM (Aperture)"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse vision JSON, subtract container tare (from data/containers.json),\n// then apply bias-table multiplier (learned). Merge with trigger payload.\n\n// \u2500\u2500 Static container lookup (mirror of data/containers.json \u2014 edit both\n// places together, or refactor to fetch from Vercel in a future revision). \u2500\u2500\nconst CONTAINERS = {\n  'banana-box-standard':      { tare_lbs: 3.2,  keywords: ['banana box','chiquita','dole','produce box'] },\n  'milk-crate-standard':      { tare_lbs: 4.1,  keywords: ['milk crate','dairy crate'] },\n  'bread-tray-plastic':       { tare_lbs: 2.8,  keywords: ['bread tray','bakery tray'] },\n  '5gal-bucket-empty':        { tare_lbs: 2.2,  keywords: ['5 gallon bucket','five gallon','bucket'] },\n  'pallet-wood-48x40':        { tare_lbs: 35.0, keywords: ['pallet','wooden pallet','gma pallet'] },\n  'cardboard-box-small':      { tare_lbs: 0.8,  keywords: ['small cardboard box','small box'] },\n  'cardboard-box-medium':     { tare_lbs: 1.6,  keywords: ['medium cardboard box','medium box'] },\n  'cardboard-box-large':      { tare_lbs: 2.8,  keywords: ['large cardboard box','large box','shipping box'] },\n  'reusable-shopping-bag':    { tare_lbs: 0.3,  keywords: ['reusable bag','shopping bag','grocery bag'] },\n  'produce-mesh-bag-50lb':    { tare_lbs: 0.15, keywords: ['mesh bag','onion bag','potato bag'] },\n  'no-container-loose':       { tare_lbs: 0.0,  keywords: ['loose','no container','bare','directly on floor'] }\n};\n\nfunction resolveContainer(visionResponse) {\n  // Exact match on container_type key\n  const key = (visionResponse.container_type || '').toLowerCase().trim();\n  if (CONTAINERS[key]) return { key, ...CONTAINERS[key] };\n  // Substring match across item_type + notes + container_type\n  const haystack = [\n    visionResponse.container_type || '',\n    visionResponse.item_type || '',\n    visionResponse.notes || ''\n  ].join(' ').toLowerCase();\n  for (const [k, def] of Object.entries(CONTAINERS)) {\n    for (const kw of def.keywords) {\n      if (haystack.includes(kw)) return { key: k, ...def };\n    }\n  }\n  // Unmatched \u2014 no tare subtraction, log the raw classification\n  return { key: visionResponse.container_type || 'unknown', tare_lbs: 0.0, unmatched: true };\n}\n\n// \u2500\u2500 Parse vision JSON \u2500\u2500\n// NIM (HTTP) returns choices[0].message.content; the older langchain node\n// returned message.content / content. Accept all shapes.\nlet raw = $json.choices?.[0]?.message?.content ?? $json.message?.content ?? $json.content ?? $json;\n// Defensive: strip ```json fences if a model ever wraps its output.\nif (typeof raw === 'string') {\n  raw = raw.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/, '').trim();\n}\nlet vision;\ntry {\n  vision = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (e) {\n  throw new Error('Vision returned non-JSON: ' + String(raw).slice(0, 300));\n}\n\nconst trigger = $('Webhook: donation button').first().json.body || {};\nconst config = $('Load prompt + config').first().json;\nconst bridge = $('Build vision request').first().json || {};\n\n// Bias table and learned densities \u2014 not wired in v1, default to empty.\n// When Vercel serves /bias-table.json and /learned-densities.json, plug them\n// in here via additional HTTP Request nodes + $('<name>').first().json.\nconst biasTable = {};\nconst densTable = {};\n\n// \u2500\u2500 Layer 1: container tare subtraction (deterministic) \u2500\u2500\nconst container = resolveContainer(vision);\nconst rawWeight = vision.weight_lbs;\nconst netWeight = (typeof rawWeight === 'number')\n  ? Math.max(0, rawWeight - container.tare_lbs)\n  : null;\n\n// \u2500\u2500 Layer 2: learned density override (if available for this item_type) \u2500\u2500\nconst densKey = (vision.item_type || '').toLowerCase().trim();\nconst dens = densTable[densKey];\nlet densityOverrideApplied = false;\nlet weightFromLearnedDensity = null;\nif (dens && dens.using_learned && vision.estimated_volume_cu_in) {\n  weightFromLearnedDensity = Math.max(0, vision.estimated_volume_cu_in * dens.density_lbs_per_cu_in_mean);\n  densityOverrideApplied = true;\n}\n\n// \u2500\u2500 Layer 3: bias multiplier from residual history \u2500\u2500\nconst biasKey = densKey;\nconst multiplier = (biasTable && biasTable[biasKey] && typeof biasTable[biasKey] === 'number') ? biasTable[biasKey] : 1.0;\nconst preBiasWeight = weightFromLearnedDensity !== null ? weightFromLearnedDensity : netWeight;\nconst adjustedWeight = (preBiasWeight !== null) ? preBiasWeight * multiplier : null;\n\n// \u2500\u2500 Ground truth from scale OCR (deterministic, passes through to Sheet) \u2500\u2500\nconst scaleReading = (typeof bridge.scale_reading_lbs === 'number' && bridge.scale_stable === true)\n  ? bridge.scale_reading_lbs : null;\nconst residualVsScale = (scaleReading !== null && adjustedWeight !== null)\n  ? adjustedWeight - scaleReading : null;\n\nreturn [{ json: {\n  ...vision,\n  donation_id: trigger.donation_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),\n  container_type: container.key,\n  tare_lbs: container.tare_lbs,\n  container_unmatched: container.unmatched === true,\n  weight_lbs_raw: rawWeight,\n  weight_lbs_net: netWeight,\n  weight_lbs_from_learned_density: weightFromLearnedDensity,\n  weight_lbs: adjustedWeight,\n  density_override_applied: densityOverrideApplied,\n  density_used: dens ? dens.density_lbs_per_cu_in_mean : null,\n  density_source: dens && dens.using_learned ? 'learned' : 'model',\n  bias_multiplier: multiplier,\n  bias_applied: multiplier !== 1.0,\n  scale_reading_lbs: scaleReading,\n  scale_confidence: bridge.scale_confidence ?? null,\n  true_weight_lbs: scaleReading,\n  ground_truth_source: scaleReading !== null ? 'scale_ocr' : null,\n  residual_vs_scale_lbs: residualVsScale,\n  description: trigger.description ?? null,\n  location: trigger.location ?? null,\n  triggered_at: trigger.triggered_at ?? new Date().toISOString(),\n  prompt_version: config.prompt_version,\n  model: config.model\n}}];"
+        },
+        "id": "6416ce9d-bb1a-479e-a5fd-35ddeeabe0fd",
+        "name": "Parse vision + tare + bias",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -2192,
+          3664
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 1
+            },
+            "conditions": [
+              {
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                },
+                "leftValue": "={{ $json.inside_zone === true && typeof $json.weight_lbs === 'number' }}",
+                "id": "85391323-a278-4c60-9a2e-eea22cec0b63"
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "46a637d3-dfaa-41da-ac57-a95f82976f1c",
+        "name": "Guard: inside zone + has weight",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          -1936,
+          3664
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "append",
+          "documentId": {
+            "__rl": true,
+            "value": "=<google-sheet-id>",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Donations",
+            "mode": "name"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "triggered_at": "={{ $json.triggered_at }}",
+              "location": "={{ $json.location || '' }}",
+              "description": "={{ $json.description || '' }}",
+              "item_type": "={{ $json.item_type || '' }}",
+              "inside_zone": "={{ $json.inside_zone }}",
+              "charuco_detected": "={{ $json.charuco_detected }}",
+              "weight_lbs": "={{ $json.weight_lbs }}",
+              "weight_lbs_raw": "={{ $json.weight_lbs_raw }}",
+              "weight_lbs_low": "={{ $json.weight_lbs_low }}",
+              "weight_lbs_high": "={{ $json.weight_lbs_high }}",
+              "bias_multiplier": "={{ $json.bias_multiplier }}",
+              "confidence": "={{ $json.confidence }}",
+              "known_failure_flags": "={{ ($json.known_failure_flags || []).join(',') }}",
+              "notes": "={{ $json.notes || '' }}",
+              "prompt_version": "={{ $json.prompt_version }}",
+              "model": "={{ $json.model }}",
+              "container_type": "={{ $json.container_type || '' }}",
+              "tare_lbs": "={{ $json.tare_lbs }}",
+              "donation_id": "={{ $json.donation_id }}",
+              "scale_reading_lbs": "={{ $json.scale_reading_lbs }}",
+              "scale_confidence": "={{ $json.scale_confidence }}",
+              "true_weight_lbs": "={{ $json.true_weight_lbs }}",
+              "ground_truth_source": "={{ $json.ground_truth_source || '' }}",
+              "residual_vs_scale_lbs": "={{ $json.residual_vs_scale_lbs }}",
+              "density_used": "={{ $json.density_used }}",
+              "density_source": "={{ $json.density_source }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "triggered_at",
+                "displayName": "triggered_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "location",
+                "displayName": "location",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "description",
+                "displayName": "description",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "donation_id",
+                "displayName": "donation_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "item_type",
+                "displayName": "item_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "container_type",
+                "displayName": "container_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "tare_lbs",
+                "displayName": "tare_lbs",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "inside_zone",
+                "displayName": "inside_zone",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "charuco_detected",
+                "displayName": "charuco_detected",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "weight_lbs",
+                "displayName": "weight_lbs",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "weight_lbs_raw",
+                "displayName": "weight_lbs_raw",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "weight_lbs_low",
+                "displayName": "weight_lbs_low",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "weight_lbs_high",
+                "displayName": "weight_lbs_high",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "bias_multiplier",
+                "displayName": "bias_multiplier",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "density_used",
+                "displayName": "density_used",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "density_source",
+                "displayName": "density_source",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "confidence",
+                "displayName": "confidence",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "scale_reading_lbs",
+                "displayName": "scale_reading_lbs",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "scale_confidence",
+                "displayName": "scale_confidence",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "true_weight_lbs",
+                "displayName": "true_weight_lbs",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "ground_truth_source",
+                "displayName": "ground_truth_source",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "residual_vs_scale_lbs",
+                "displayName": "residual_vs_scale_lbs",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "known_failure_flags",
+                "displayName": "known_failure_flags",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "notes",
+                "displayName": "notes",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "prompt_version",
+                "displayName": "prompt_version",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "model",
+                "displayName": "model",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {
+            "cellFormat": "USER_ENTERED"
+          }
+        },
+        "id": "cced043a-77ef-42cf-888b-ce812310616c",
+        "name": "Append to Google Sheet",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          -1936,
+          3856
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "<n8n-credential-id>",
+            "name": "Google Sheets OAuth2 API"
+          }
+        },
+        "continueOnFail": true,
+        "notes": "Fire-and-forget. Fails silently if Google creds aren't wired yet."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 1
+            },
+            "conditions": [
+              {
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                },
+                "leftValue": "={{ !!($env.FARMBRITE_API_BASE && $env.FARMBRITE_INVENTORY_TYPE_ID && $env.FARMBRITE_LOCATION_ID) }}",
+                "id": "a9701c1b-e178-4cb0-962b-cce5e40ed2e3"
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "1be6df10-45de-4e13-976d-0b9ed37344cb",
+        "name": "Guard: Farmbrite configured",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          -1696,
+          3456
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// Zone-miss or null-weight: respond without writing to Farmbrite.\nconst v = $json;\nreturn [{ json: {\n  weight_lbs: null,\n  weight_residual_est: null,\n  item_type: v.item_type ?? null,\n  confidence: v.confidence ?? null,\n  charuco_detected: v.charuco_detected ?? false,\n  farmbrite_id: null,\n  notes: v.notes ?? (v.inside_zone === false ? 'Outside the yellow zone \u2014 reposition and retry.' : 'Could not estimate weight.')\n}}];"
+        },
+        "id": "70b8bcde-2bde-4f47-a041-5161d19f4d25",
+        "name": "Shape response (skipped)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1696,
+          3776
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Farmbrite not configured \u2014 pass the parsed vision through so the PWA\n// still shows weight + item + confidence, but farmbrite_id stays null.\nreturn [{ json: { __farmbrite_skipped: true } }];"
+        },
+        "id": "dc75a891-2af6-49dc-8f84-0d39dc67d426",
+        "name": "Farmbrite skipped (pending key)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1456,
+          3616
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json) }}",
+          "options": {}
+        },
+        "id": "830b230e-207f-4d1a-8906-bdb7abc7ae11",
+        "name": "Respond (skipped)",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          -1456,
+          3776
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Unified response shape for the PWA.\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst fb = $json;\nconst farmbriteSkipped = fb?.__farmbrite_skipped === true;\nconst farmbriteId = farmbriteSkipped ? null : (fb?.id ?? fb?.uuid ?? fb?._id ?? null);\n\nconst residualEst = (parsed.weight_lbs_high != null && parsed.weight_lbs_low != null)\n  ? (parsed.weight_lbs_high - parsed.weight_lbs_low) / 2\n  : null;\n\nlet notes = parsed.notes ?? null;\nif (farmbriteSkipped) {\n  notes = (notes ? notes + ' \u00b7 ' : '') + 'Farmbrite pending (no API key yet); execution logged in n8n history.';\n}\n\nreturn [{ json: {\n  weight_lbs: parsed.weight_lbs ?? null,\n  weight_residual_est: residualEst,\n  item_type: parsed.item_type ?? null,\n  confidence: parsed.confidence ?? null,\n  charuco_detected: parsed.charuco_detected ?? false,\n  farmbrite_id: farmbriteId,\n  farmbrite_pending: farmbriteSkipped,\n  notes\n}}];"
+        },
+        "id": "52dca442-14fd-4b38-9e15-cebab81e3fe5",
+        "name": "Shape response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1216,
+          3536
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json) }}",
+          "options": {}
+        },
+        "id": "2d501709-1a42-4909-baa6-67ef067f9434",
+        "name": "Respond OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          -976,
+          3536
+        ]
+      }
+    ],
+    "connections": {
+      "Load prompt + config": {
+        "main": [
+          [
+            {
+              "node": "Build vision request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook: donation button": {
+        "main": [
+          [
+            {
+              "node": "Verify Token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify Token": {
+        "main": [
+          [
+            {
+              "node": "Load prompt + config",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond ",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Vision: weight estimate": {
+        "main": [
+          [
+            {
+              "node": "Parse vision + tare + bias",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse vision + tare + bias": {
+        "main": [
+          [
+            {
+              "node": "Guard: inside zone + has weight",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Append to Google Sheet",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Guard: inside zone + has weight": {
+        "main": [
+          [
+            {
+              "node": "Farmbrite skipped (pending key)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Shape response (skipped)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Guard: Farmbrite configured": {
+        "main": [
+          [],
+          []
+        ]
+      },
+      "Shape response (skipped)": {
+        "main": [
+          [
+            {
+              "node": "Respond (skipped)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Farmbrite skipped (pending key)": {
+        "main": [
+          [
+            {
+              "node": "Shape response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Shape response": {
+        "main": [
+          [
+            {
+              "node": "Respond OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build vision request": {
+        "main": [
+          [
+            {
+              "node": "Vision: weight estimate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Mika Sibinkic",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-28T22:56:38.235Z",
+        "id": 87,
+        "workflowId": "<n8n-workflow-id>",
+        "versionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+        "event": "activated",
+        "userId": "f3884053-3487-475b-859b-c906b72967a7"
+      },
+      {
+        "createdAt": "2026-07-28T22:56:38.941Z",
+        "id": 89,
+        "workflowId": "<n8n-workflow-id>",
+        "versionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+        "event": "activated",
+        "userId": "f3884053-3487-475b-859b-c906b72967a7"
+      },
+      {
+        "createdAt": "2026-07-28T22:56:38.150Z",
+        "id": 86,
+        "workflowId": "<n8n-workflow-id>",
+        "versionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+        "event": "deactivated",
+        "userId": "f3884053-3487-475b-859b-c906b72967a7"
+      },
+      {
+        "createdAt": "2026-07-28T22:56:38.875Z",
+        "id": 88,
+        "workflowId": "<n8n-workflow-id>",
+        "versionId": "3ca12eb3-d9c3-4f0e-aa9a-2b8b08babd47",
+        "event": "deactivated",
+        "userId": "f3884053-3487-475b-859b-c906b72967a7"
+      }
+    ]
+  }
+}

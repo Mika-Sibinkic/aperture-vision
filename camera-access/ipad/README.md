@@ -41,12 +41,32 @@ test vector** (`node` test: MD5 primitives + full `6629fae4…` response + the
 allow **Basic** auth (Hikvision default is often `digest/basic`), a pure Apple
 Shortcut works too — but the Scriptable digest path needs **no camera change**.
 
-## On-site install (~10 min, needs the iPad on Cul2vate WiFi)
+## ⭐ Follow `ONSITE-CARD.md` on site
+
+`ONSITE-CARD.md` is the 4-step card to actually use on site: nothing to type, a
+one-tap self-test that proves every hop, and a one-action fix list. The detail
+below is background.
+
+**Before leaving:** `python3 scripts/make-ipad-script.py` writes a pre-configured
+`Aperture.local.js` (gitignored — it holds the camera password). AirDrop it to the
+iPad. That removes every settings prompt from the on-site procedure.
+
+## Backend status: LIVE and verified (2026-07-28)
+
+Vercel prod relay → n8n (rewired, bridge hop deleted) → NVIDIA NIM
+`llama-3.2-90b-vision-instruct` → Google Sheet. Real POST returns 200 in ~11.5 s and
+writes a row. Both regression controls pass:
+`python3 scripts/vision-regression-test.py --e2e`. The **only** hop not yet exercised
+is the iPad reaching the camera over the Cul2vate LAN — that is what the self-test checks.
+
+## On-site install (~10 min, needs the iPad on Cul2vate WiFi) — background detail
 
 1. **Install Scriptable** (free, App Store).
 2. In Scriptable: **+** → paste the contents of `camera-access/ipad/aperture-pull.js`
    → name it **Aperture**. (Or AirDrop the file and import.)
-3. **Run it once.** First run prompts for and stores in the iOS Keychain:
+3. **Run it once.** With the pre-configured build there is nothing to enter. (If you
+   ever use the plain committed copy instead, it prompts once and stores in the iOS
+   Keychain:)
    - Camera base URL: `http://<camera-ip>`
    - Username: `admin`
    - Password: (see `SECRETS.local.md` — `<camera-password>`)
@@ -62,23 +82,20 @@ Shortcut works too — but the Scriptable digest path needs **no camera change**
      add to Home Screen with a custom icon that matches the current PWA icon,
      and **Guided Access / Single-App Mode** so volunteers can't exit.
 
-## Companion changes (server-side — do these with the on-site test)
+## Companion changes (server-side) — ALREADY DONE
 
-These are prepared in the repo; flip them live during the on-site pass so the
-whole chain can be verified in one go (they leave nothing half-broken — the
-current live workflow is already non-functional pointing at a dead tunnel).
+Applied and deployed 2026-07-28 by `scripts/rewire-n8n-ipad-nim.py` (backs up →
+verifies → PUTs → reads back; `--restore <backup>` rolls back):
 
-1. **Relay** (`app/api/donate/route.ts`): already accepts `image_b64` and
-   forwards it to n8n (backward-compatible; deploy the branch to production).
-2. **n8n** workflow `<n8n-workflow-id>`:
-   - `Fetch snapshot + scale OCR (via Bridge)` → replace the HTTP fetch with a
-     Set/Code node that reads `{{$json.body.image_b64}}` from the webhook (no
-     bridge call). Keep `Unpack bridge response` mapping the same field the
-     vision node reads.
-   - `Vision: weight estimate` → point the OpenAI node's **base URL** to NVIDIA
-     NIM (`https://integrate.api.nvidia.com/v1`) with the NIM key (see
-     `SECRETS.local.md`) and a NIM vision model. Replaces the dry `OpenAi
-     account 2`.
+1. **Relay** (`app/api/donate/route.ts`): accepts `image_b64`, `maxDuration` 120 s,
+   legible error text. **Deployed to Vercel production.**
+2. **n8n** workflow `<n8n-workflow-id>` (now 15 nodes, active):
+   - Dead bridge-fetch node **deleted**; `Build vision request` reads the posted
+     `image_b64` and assembles the NIM call (including the mandatory
+     `response_format: json_object`).
+   - `Vision: weight estimate` is now an HTTP request to NIM, authenticated by the
+     n8n credential `NVIDIA NIM (Aperture)` so the key is never in the workflow JSON.
+   - Parse node accepts NIM's `choices[0].message.content` and strips stray fences.
 
 ## Fallback
 

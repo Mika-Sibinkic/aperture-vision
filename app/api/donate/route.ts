@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// The tap posts a camera frame (~0.5 MB base64) and waits on a NIM vision call
+// (~13 s typical, one retry on a transient 5xx). Budget generously so a slow
+// call surfaces as a real result rather than a client-side timeout.
+export const maxDuration = 120;
 
 type IncomingBody = {
   description?: string;
@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
   };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45_000);
+  const timeout = setTimeout(() => controller.abort(), 100_000);
 
   try {
     const resp = await fetch(webhook, {
@@ -67,10 +70,12 @@ export async function POST(req: NextRequest) {
       const parsed = JSON.parse(text);
       return NextResponse.json(parsed);
     } catch {
-      return NextResponse.json(
-        { error: "n8n returned non-JSON", raw: text.slice(0, 500) },
-        { status: 502 }
-      );
+      // An empty body here means the workflow ended without hitting a Respond node
+      // (usually a node threw). Say so plainly instead of showing a bare blank.
+      const detail = text.trim().length
+        ? text.slice(0, 500)
+        : "n8n closed the request without a response — a workflow node failed. Check the n8n execution log.";
+      return NextResponse.json({ error: detail }, { status: 502 });
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
