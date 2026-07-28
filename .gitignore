@@ -16,3 +16,8 @@ checkpoint.local.md
 demo/output/
 * 2.*
 * 2
+.n8n-nim-credential-id
+.vercel
+*.local.js
+camera-access/ipad/Aperture.local.js
+n8n/backups/
