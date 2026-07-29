@@ -60,6 +60,7 @@ OLD_FETCH_NODE = "Fetch snapshot + scale OCR (via Bridge)"
 CONFIG_NODE = "Load prompt + config"
 PARSE_NODE = "Parse vision + tare + bias"
 WEBHOOK_NODE = "Webhook: donation button"
+SHEET_NODE = "Append to Google Sheet"
 
 
 # --------------------------------------------------------------------------- api
@@ -226,6 +227,24 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     # 4. parse node: understand NIM's response shape + the rename
     parse = nodes[PARSE_NODE]
     parse["parameters"]["jsCode"] = patch_parse_code(parse["parameters"]["jsCode"])
+    # Carry the archived-photo fields through so every logged prediction points at
+    # the exact image it was made from. This is what makes a row trainable later.
+    if "image_url:" not in parse["parameters"]["jsCode"]:
+        parse["parameters"]["jsCode"] = parse["parameters"]["jsCode"].replace(
+            "  prompt_version: config.prompt_version,",
+            "  image_url: trigger.image_url ?? null,\n"
+            "  image_sha256: trigger.image_sha256 ?? null,\n"
+            "  image_bytes: trigger.image_bytes ?? null,\n"
+            "  archive_error: trigger.archive_error ?? null,\n"
+            "  prompt_version: config.prompt_version,")
+
+    # 2) Sheet: log the photo pointer alongside the prediction.
+    sheet = nodes.get(SHEET_NODE)
+    if sheet:
+        cols = sheet["parameters"].get("columns", {}).get("value")
+        if isinstance(cols, dict):
+            cols.setdefault("image_url", "={{ $json.image_url }}")
+            cols.setdefault("image_sha256", "={{ $json.image_sha256 }}")
 
     # 5. drop the dead bridge fetch and rewire config -> build
     wf["nodes"] = [n for n in wf["nodes"] if n["name"] != OLD_FETCH_NODE]
