@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, randomUUID } from "node:crypto";
+import { put } from "@vercel/blob";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +18,52 @@ type IncomingBody = {
   // instead of fetching from a bridge. Absent for the legacy PWA path.
   image_b64?: string;
   source?: string;
+  donation_id?: string;
 };
+
+type ArchiveResult = {
+  url: string | null;
+  sha256: string | null;
+  bytes: number | null;
+  error: string | null;
+};
+
+/**
+ * Archive the captured frame to Vercel Blob (private) so every prediction keeps
+ * the exact image it was made from. Without this the photo is discarded after
+ * the vision call and the donation can never become training data.
+ *
+ * Deliberately NON-BLOCKING: a storage outage must never stop a volunteer from
+ * logging a donation, so every failure is captured and reported alongside the
+ * result instead of thrown.
+ */
+async function archivePhoto(
+  imageB64: string | undefined,
+  donationId: string,
+  triggeredAt: string
+): Promise<ArchiveResult> {
+  const empty: ArchiveResult = { url: null, sha256: null, bytes: null, error: null };
+  if (!imageB64) return empty;
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return { ...empty, error: "BLOB_READ_WRITE_TOKEN not configured" };
+  }
+
+  try {
+    const bytes = Buffer.from(imageB64.replace(/^data:image\/[a-zA-Z]+;base64,/, ""), "base64");
+    if (bytes.length < 1000) return { ...empty, error: "image too small to archive" };
+
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const day = triggeredAt.slice(0, 10);           // YYYY-MM-DD — keeps the store browsable
+    const blob = await put(`donations/${day}/${donationId}.jpg`, bytes, {
+      access: "private",                            // must match the store's access mode
+      contentType: "image/jpeg",
+      addRandomSuffix: false,
+    });
+    return { url: blob.url, sha256, bytes: bytes.length, error: null };
+  } catch (e) {
+    return { ...empty, error: e instanceof Error ? e.message : "archive failed" };
+  }
+}
 
 export async function POST(req: NextRequest) {
   const webhook = process.env.N8N_WEBHOOK_URL;
@@ -36,11 +83,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
+  const triggeredAt = body.triggered_at ?? new Date().toISOString();
+  // One id shared by the archived photo, the n8n execution, and the Sheet row.
+  // It is the join key that later lets a real weight be matched to this
+  // prediction, which is the whole point of archiving.
+  const donationId = body.donation_id ?? randomUUID();
+
+  const archive = await archivePhoto(body.image_b64, donationId, triggeredAt);
+
   const payload = {
     description: (body.description ?? "").slice(0, 2000),
-    triggered_at: body.triggered_at ?? new Date().toISOString(),
+    triggered_at: triggeredAt,
     location: body.location ?? null,
     image_b64: body.image_b64 ?? null,
+    donation_id: donationId,
+    image_url: archive.url,
+    image_sha256: archive.sha256,
+    image_bytes: archive.bytes,
+    archive_error: archive.error,
     source: body.source ?? "aperture-pwa"
   };
 

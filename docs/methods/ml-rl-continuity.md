@@ -34,3 +34,35 @@ Architecture + safeguards detail: [`../LEARNING-LOOPS.md`](../LEARNING-LOOPS.md)
 ## Change-log
 
 - **2026-06-15** — Audited real-vs-stub status from primary sources. Confirmed [VERIFIED] no ground truth has ever fed the loop (`learned-densities.json`/`bias-table.json` empty); density volume + ensemble + fine-tune are stub/aspirational. Recorded continuity rules. Rollback: n/a (documentation only).
+
+
+## Training corpus — LIVE as of 2026-07-28
+
+Until now every captured frame was **discarded** after the vision call, so no
+donation could ever become training data. That is fixed: the Vercel relay archives
+the exact image it sent to the model before forwarding the tap.
+
+| Piece | Where | Key |
+|---|---|---|
+| Photo (exact bytes sent to the model) | Vercel Blob, **private** store `<blob-store>`, path `donations/YYYY-MM-DD/<donation_id>.jpg` | `donation_id` |
+| Prediction + tare/bias + model + prompt_version | Google Sheet `Donations` | `donation_id` |
+| `image_url`, `image_sha256`, `image_bytes` | both | `image_sha256` dedupes re-taps of the same frame |
+| Ground truth | `true_weight_lbs` column (empty until a real weight arrives) | joined on `donation_id` |
+
+**Archiving is non-blocking by design** — a storage outage records `archive_error`
+and the volunteer's tap still succeeds. Verified: a misconfigured access mode failed
+the upload while the tap still returned a weight, and the reason was captured rather
+than lost.
+
+**Ground-truth sources, in order of value:**
+1. **Farmbrite** — if staff record actual received weights, join on `donation_id`
+   (written into the Farmbrite record) or on timestamp+item. Pending API token.
+2. **Manual correction** — `app/api/correct/route.ts` already accepts
+   `{donation_id, true_weight_lbs}`; it needs an n8n correction webhook
+   (`N8N_CORRECTION_URL`) which does not exist yet.
+3. Scale-in-the-loop OCR — future.
+
+Once ~100–300 rows carry a real `true_weight_lbs`, the residual analysis in this
+doc becomes runnable and a LoRA fine-tune on the paired (image, weight) corpus
+becomes possible. Nothing else is needed to start accumulating — it accumulates
+from the first volunteer tap.
