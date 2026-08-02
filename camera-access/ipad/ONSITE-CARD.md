@@ -57,8 +57,18 @@ Delete it later if you care; it's harmless.
 ### 4. Make it the "app" for volunteers — THIS is the handoff
 Until this is done there is no front end; the script only exists inside Scriptable.
 
-- Scriptable → long-press **Aperture** → **Script Settings** → **Add to Home Screen**.
-- Name it **Aperture** and pick the icon → **Add**.
+**Use the Shortcuts app — not Scriptable's own "Add to Home Screen".**
+Scriptable's button opens a `data:text/html;base64,...` page that is supposed to
+redirect to `scriptable:///run/Aperture`. In a normal Safari tab WebKit refuses that
+navigation and shows *"Not allowed to use restricted network port"*. The Shortcuts
+route avoids the whole mechanism. [Observed on the iPad 2026-08-02]
+
+1. Open the **Shortcuts** app.
+2. **+** → search **Scriptable** → add **Run Script**.
+3. **Script** → **Aperture**.
+4. Turn **Run in App** ON — required, because the script presents alerts and tables.
+5. Name it **Aperture**, pick an icon.
+6. Share icon → **Add to Home Screen** → **Add**.
 - The Home Screen icon runs the donation flow **directly** — one tap, no menu. That is
   what volunteers use. The menu (System check / Recent log) only ever appears when the
   script is opened inside the Scriptable app, which is the operator path.
