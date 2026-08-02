@@ -117,6 +117,62 @@ function headerLookup(headers, name) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Crash-safe local state.
+//
+// A loading dock is a hostile place for a tap-and-wait UI: the volunteer waits
+// 10-25 s, assumes it didn't work, and taps again — which without this would log
+// the SAME donation twice and silently inflate the day's poundage. That is the
+// worst failure this system can have, because nothing looks broken.
+//
+// State lives in a plain file, so it survives the app being killed, the iPad
+// being powered off mid-run, and iOS suspending the script.
+// ---------------------------------------------------------------------------
+const IN_FLIGHT_WINDOW_MS = 75_000;   // > worst observed round trip (~27 s) with margin
+
+// Resolved lazily, never at load time: nothing about starting this script should
+// be able to throw before the error handler in main() is installed.
+function statePath() {
+  const fm = FileManager.local();
+  return fm.joinPath(fm.libraryDirectory(), "aperture-state.json");
+}
+
+function readState() {
+  try {
+    const fm = FileManager.local();
+    const p = statePath();
+    if (!fm.fileExists(p)) return {};
+    return JSON.parse(fm.readString(p)) || {};
+  } catch (e) {
+    return {};                                   // corrupt state must never block a tap
+  }
+}
+
+function writeState(patch) {
+  try {
+    const next = Object.assign(readState(), patch);
+    FileManager.local().writeString(statePath(), JSON.stringify(next));
+    return next;
+  } catch (e) {
+    return {};                                   // storage failure must never block a tap
+  }
+}
+
+// Retry once on a transient blip (Wi-Fi hiccup, camera busy, upstream 5xx).
+// Anything still failing after this is a real condition worth showing a human.
+async function withRetry(label, fn) {
+  try {
+    return await fn();
+  } catch (first) {
+    await new Promise((r) => Timer.schedule(1200, false, r));
+    try {
+      return await fn();
+    } catch (second) {
+      throw new Error(String(second && second.message ? second.message : second));
+    }
+  }
+}
+
 async function resolveConfig(mode) {
   if (CONFIG.base && CONFIG.pass) return CONFIG;            // pre-configured build
   if (mode === "setup") await runSetup();
@@ -213,7 +269,7 @@ function shrink(data, maxPixels) {
   }
 }
 
-async function postToRelay(cfg, b64, description) {
+async function postToRelay(cfg, b64, description, donationId) {
   const post = new Request(cfg.relay);
   post.method = "POST";
   post.timeoutInterval = 120;
@@ -223,6 +279,10 @@ async function postToRelay(cfg, b64, description) {
     image_b64: b64,
     triggered_at: new Date().toISOString(),
     location: cfg.location,
+    // Stable across an automatic retry, so if the first attempt actually landed
+    // server-side and only the reply was lost, the duplicate is identifiable by
+    // donation_id instead of masquerading as a second real donation.
+    donation_id: donationId || undefined,
     source: "aperture-ipad",
   });
   const text = await post.loadString();
@@ -300,16 +360,89 @@ async function selfTest(cfg) {
   return steps;
 }
 
+// Live progress, shown immediately. The volunteer must SEE that something is
+// happening, or they will tap again during the wait.
+function progressTable() {
+  const t = new UITable();
+  t.showSeparators = true;
+  const render = (lines, headline) => {
+    t.removeAllRows();
+    const h = t.addRow();
+    h.isHeader = true;
+    h.height = 60;
+    h.addText(headline);
+    for (const line of lines) {
+      const r = t.addRow();
+      r.addText(line);
+    }
+    t.reload();
+  };
+  return { table: t, render };
+}
+
+async function runDonation(cfg) {
+  const state = readState();
+  const now = Date.now();
+
+  // Guard: a run is already in flight -> do NOT start a second one.
+  if (state.inFlightAt && now - state.inFlightAt < IN_FLIGHT_WINDOW_MS) {
+    const a = new Alert();
+    a.title = "Already logging";
+    const last = state.lastResult;
+    a.message =
+      "This donation is still being weighed — please wait a few seconds.\n\n" +
+      "Do NOT tap again; tapping twice records the same donation twice." +
+      (last ? `\n\nLast logged: ${last.summary} at ${last.at}` : "");
+    a.addAction("OK");
+    await a.present();
+    return;
+  }
+
+  // Claim the slot before any network work, so a mid-run power-off still
+  // leaves a marker rather than a half-logged donation with no trace.
+  const donationId = UUID.string().toLowerCase();
+  writeState({ inFlightAt: now, inFlightId: donationId });
+
+  const ui = progressTable();
+  ui.render(["Reading the camera…"], "Working");
+  ui.table.present(false);
+
+  try {
+    const frame = await withRetry("camera", () => grabFrame(cfg));
+    ui.render(["✅ Photo captured", "Estimating the weight…", "", "This takes about 10–25 seconds."], "Working");
+
+    const small = shrink(frame, cfg.maxPixels);
+    const result = await withRetry("relay", () => postToRelay(cfg, small.toBase64String(), "", donationId));
+
+    const summary = typeof result.weight_lbs === "number"
+      ? `${result.weight_lbs.toFixed(1)} lbs ${result.item_type || ""}`.trim()
+      : "logged";
+    writeState({
+      inFlightAt: null,
+      inFlightId: null,
+      lastResult: { summary, at: new Date().toLocaleTimeString(), donation_id: donationId },
+    });
+    await showResult(result);
+  } catch (e) {
+    // Release the lock so the next tap can retry immediately — a failed run must
+    // not lock the dock out for the full window.
+    writeState({ inFlightAt: null, inFlightId: null });
+    throw e;
+  }
+}
+
 async function main() {
   const mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "").toString().trim().toLowerCase();
   const cfg = await resolveConfig(mode);
 
   if (mode === "selftest") { await selfTest(cfg); Script.complete(); return; }
+  if (mode === "reset") {                      // clears a stuck lock; never needed normally
+    writeState({ inFlightAt: null, inFlightId: null });
+    const a = new Alert(); a.title = "Aperture reset"; a.message = "Ready for the next donation."; a.addAction("OK");
+    await a.present(); Script.complete(); return;
+  }
 
-  const frame = await grabFrame(cfg);
-  const small = shrink(frame, cfg.maxPixels);
-  const result = await postToRelay(cfg, small.toBase64String(), "");
-  await showResult(result);
+  await runDonation(cfg);
   Script.complete();
 }
 
