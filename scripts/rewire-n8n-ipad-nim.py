@@ -480,10 +480,25 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     # Shape response is ALL the relay (and therefore the CSV and the iPad) ever sees,
     # so anything worth logging or showing must be listed here explicitly.
     shape = nodes.get(SHAPE_NODE)
+    # NOTE: each addition below is gated on ITS OWN marker. Gating the whole block
+    # on one field means later additions silently never apply — that bug has now
+    # bitten twice (node types, then farmbrite_order_id). [fixed 2026-08-02]
+    if shape and "farmbrite_order_id" not in shape["parameters"]["jsCode"]:
+        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
+            "  charuco_detected: parsed.charuco_detected ?? false,",
+            "  charuco_detected: parsed.charuco_detected ?? false,\n"
+            "  // Incoming item is the Farmbrite order (the write is chained ahead of\n"
+            "  // this node). Needed so an undo can delete the right draft.\n"
+            "  farmbrite_order_id: (fb && typeof fb.id === 'string') ? fb.id : null,",
+            1)
     if shape and "container_count" not in shape["parameters"]["jsCode"]:
         shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
             "  charuco_detected: parsed.charuco_detected ?? false,",
             "  charuco_detected: parsed.charuco_detected ?? false,\n"
+            "  // Needed so /api/void can remove the right draft order on an undo.\n"
+            "  // The incoming item is the Farmbrite order itself now that the write is\n"
+            "  // chained ahead of this node. Needed so an undo can delete the draft.\n"
+            "  farmbrite_order_id: (fb && typeof fb.id === 'string') ? fb.id : null,\n"
             "  container_type: parsed.container_type ?? null,\n"
             "  container_count: parsed.container_count ?? null,\n"
             "  container_fill_fraction: parsed.container_fill_fraction ?? null,\n"
@@ -543,12 +558,15 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
                     if k in node:
                         current[k] = node[k]
         conns = wf.setdefault("connections", {})
-        conns[FARMBRITE_SKIP_NODE] = {"main": [[
-            {"node": FARMBRITE_BUILD_NODE, "type": "main", "index": 0},
-            {"node": SHAPE_NODE, "type": "main", "index": 0},
-        ]]}
+        # Chained, not parallel: the response must carry the Farmbrite order id so an
+        # undo can delete the right draft. Farmbrite's list endpoint EXCLUDES drafts
+        # (verified 2026-08-02 — a created order was absent from all 5 pages while
+        # being retrievable by id), so the id cannot be looked up after the fact.
+        # Safe to chain: the writer is onError=continueRegularOutput + alwaysOutputData,
+        # so Farmbrite being down still passes through to the response.
+        conns[FARMBRITE_SKIP_NODE] = {"main": [[{"node": FARMBRITE_BUILD_NODE, "type": "main", "index": 0}]]}
         conns[FARMBRITE_BUILD_NODE] = {"main": [[{"node": FARMBRITE_NODE, "type": "main", "index": 0}]]}
-        conns.setdefault(FARMBRITE_NODE, {"main": [[]]})
+        conns[FARMBRITE_NODE] = {"main": [[{"node": SHAPE_NODE, "type": "main", "index": 0}]]}
 
     # 2) Sheet: log the photo pointer alongside the prediction.
     sheet = nodes.get(SHEET_NODE)

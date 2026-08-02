@@ -86,14 +86,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    rows.sort((a, b) => String(a.triggered_at ?? "").localeCompare(String(b.triggered_at ?? "")));
+    // Voided donations are bookkeeping-reversed: kept in storage for audit and for
+    // the training corpus, but they are NOT part of the running record.
+    const live = rows.filter((r) => r.voided !== true);
+    live.sort((a, b) => String(a.triggered_at ?? "").localeCompare(String(b.triggered_at ?? "")));
 
     if (wantJson) {
       return NextResponse.json({
-        count: rows.length,
+        count: live.length,
+        voided: rows.length - live.length,
         blobs_found: wanted.length,
         read_errors: readErrors.slice(0, 5),
-        rows,
+        rows: live,
       });
     }
     // Never hand back a silently-empty CSV when records exist but could not be read.
@@ -106,15 +110,16 @@ export async function GET(req: NextRequest) {
 
     // Columns that mean nothing to the people reading this export. Kept in the raw
     // stored record for diagnostics, never surfaced here.
-    const HIDDEN = new Set(["confidence", "implausible_weight", "farmbrite_pending"]);
-    const extra = [...new Set(rows.flatMap((r) => Object.keys(r)))]
+    const HIDDEN = new Set(["confidence", "implausible_weight", "farmbrite_pending",
+      "voided", "voided_at", "void_reason", "farmbrite_void_error", "archive_error"]);
+    const extra = [...new Set(live.flatMap((r) => Object.keys(r)))]
       .filter((k) => !LEAD.includes(k) && !HIDDEN.has(k))
       .sort();
     const headers = [...LEAD, ...extra];
 
     const csv = [
       headers.join(","),
-      ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(",")),
+      ...live.map((r) => headers.map((h) => csvCell(r[h])).join(",")),
     ].join("\n");
 
     const stamp = new Date().toISOString().slice(0, 10);

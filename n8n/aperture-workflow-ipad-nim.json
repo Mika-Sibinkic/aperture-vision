@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T01:53:01.945Z",
+  "updatedAt": "2026-08-02T02:19:24.882Z",
   "createdAt": "2025-09-18T17:21:57.279Z",
   "id": "<n8n-workflow-id>",
   "name": "Aperture: Cul2vate Donation Logger",
@@ -566,7 +566,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Unified response shape for the PWA.\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst fb = $json;\nconst farmbriteSkipped = fb?.__farmbrite_skipped === true;\nconst farmbriteId = farmbriteSkipped ? null : (fb?.id ?? fb?.uuid ?? fb?._id ?? null);\n\nconst residualEst = (parsed.weight_lbs_high != null && parsed.weight_lbs_low != null)\n  ? (parsed.weight_lbs_high - parsed.weight_lbs_low) / 2\n  : null;\n\nlet notes = parsed.notes ?? null;\nif (farmbriteSkipped) {\n  notes = (notes ? notes + ' \u00b7 ' : '') + 'Farmbrite pending (no API key yet); execution logged in n8n history.';\n}\n\nreturn [{ json: {\n  weight_lbs: parsed.weight_lbs ?? null,\n  weight_residual_est: residualEst,\n  item_type: parsed.item_type ?? null,\n  confidence: parsed.confidence ?? null,\n  charuco_detected: parsed.charuco_detected ?? false,\n  container_type: parsed.container_type ?? null,\n  container_count: parsed.container_count ?? null,\n  container_fill_fraction: parsed.container_fill_fraction ?? null,\n  tare_lbs: parsed.tare_lbs ?? null,\n  weight_lbs_low: parsed.weight_lbs_low ?? null,\n  weight_lbs_high: parsed.weight_lbs_high ?? null,\n  implausible_weight: parsed.implausible_weight ?? false,\n  prompt_version: parsed.prompt_version ?? null,\n  model: parsed.model ?? null,\n  farmbrite_id: farmbriteId,\n  farmbrite_pending: farmbriteSkipped,\n  notes\n}}];"
+        "jsCode": "// Unified response shape for the PWA.\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst fb = $json;\nconst farmbriteSkipped = fb?.__farmbrite_skipped === true;\nconst farmbriteId = farmbriteSkipped ? null : (fb?.id ?? fb?.uuid ?? fb?._id ?? null);\n\nconst residualEst = (parsed.weight_lbs_high != null && parsed.weight_lbs_low != null)\n  ? (parsed.weight_lbs_high - parsed.weight_lbs_low) / 2\n  : null;\n\nlet notes = parsed.notes ?? null;\nif (farmbriteSkipped) {\n  notes = (notes ? notes + ' \u00b7 ' : '') + 'Farmbrite pending (no API key yet); execution logged in n8n history.';\n}\n\nreturn [{ json: {\n  weight_lbs: parsed.weight_lbs ?? null,\n  weight_residual_est: residualEst,\n  item_type: parsed.item_type ?? null,\n  confidence: parsed.confidence ?? null,\n  charuco_detected: parsed.charuco_detected ?? false,\n  // Incoming item is the Farmbrite order (the write is chained ahead of\n  // this node). Needed so an undo can delete the right draft.\n  farmbrite_order_id: (fb && typeof fb.id === 'string') ? fb.id : null,\n  container_type: parsed.container_type ?? null,\n  container_count: parsed.container_count ?? null,\n  container_fill_fraction: parsed.container_fill_fraction ?? null,\n  tare_lbs: parsed.tare_lbs ?? null,\n  weight_lbs_low: parsed.weight_lbs_low ?? null,\n  weight_lbs_high: parsed.weight_lbs_high ?? null,\n  implausible_weight: parsed.implausible_weight ?? false,\n  prompt_version: parsed.prompt_version ?? null,\n  model: parsed.model ?? null,\n  farmbrite_id: farmbriteId,\n  farmbrite_pending: farmbriteSkipped,\n  notes\n}}];"
       },
       "id": "52dca442-14fd-4b38-9e15-cebab81e3fe5",
       "name": "Shape response",
@@ -749,11 +749,6 @@
             "node": "Build Farmbrite order",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Shape response",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -793,7 +788,13 @@
     },
     "Farmbrite: log order": {
       "main": [
-        []
+        [
+          {
+            "node": "Shape response",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -851,9 +852,9 @@
       }
     ]
   },
-  "versionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
-  "activeVersionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
-  "versionCounter": 109,
+  "versionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
+  "activeVersionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
+  "versionCounter": 110,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "shared": [
@@ -894,9 +895,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-08-02T01:53:01.948Z",
-    "createdAt": "2026-08-02T01:53:01.948Z",
-    "versionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
+    "updatedAt": "2026-08-02T02:19:24.886Z",
+    "createdAt": "2026-08-02T02:19:24.886Z",
+    "versionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
     "workflowId": "<n8n-workflow-id>",
     "nodes": [
       {
@@ -1494,7 +1495,7 @@
           3776
         ],
         "parameters": {
-          "jsCode": "// Resolve the donation to a Farmbrite product and build a Draft order.\nconst PRODUCTS = {\"Acorn Squash\": \"68016e831e1f000008110583\", \"Adirondack Blue Potatoes\": \"685c02f56544a6000f3f751b\", \"Banana Peppers\": \"67c4b3c4d17b1e0008676a9c\", \"Beans\": \"68017a88598e8e000ce50ce2\", \"Beets\": \"67c4b7c6d17b1e0012676cd8\", \"Bell Peppers\": \"67d84f1d3e1b52000b5639e2\", \"Blackberries\": \"67bf7b40a7ec08000cdd7bc2\", \"Blackberry, Prime Ark Freedom\": \"67bf7ecb56ff1d000829401a\", \"Blueberries\": \"67c0dbb356ff1d000829502c\", \"Bok Choy\": \"68813f486609ae000df70d38\", \"Broccoli\": \"67c4b3f5d17b1e0012676b5a\", \"Brussels\": \"68017d86598e8e0013e50a21\", \"Burbank Russet Potatoes\": \"6877d6c1012e4f0008cab97b\", \"Butternut Squash\": \"68891e79f87924001c278829\", \"Cabbage\": \"67c4b379d17b1e0012676b58\", \"Cantaloupe\": \"68017a4c598e8e0013e50a17\", \"Carrots\": \"67c4e06ed17b1e000b676981\", \"Cauliflower\": \"67c4b8b98038e30008c0ac26\", \"Cherry Tomatoes\": \"6863e8ed4c2c080008f6176e\", \"Chives\": \"67c4dfe6d17b1e0012676e12\", \"Collards\": \"67c4b9dad17b1e000b676939\", \"Community Garden Produce\": \"683615bc9685a100081209f1\", \"Corn\": \"687fa362ca68a4000d38f9de\", \"Eggplant\": \"68b75365dc56b597cf02dce6\", \"Fingerling Potatoes\": \"6863e2284c2c08000df61298\", \"Garlic Scapes\": \"682cba030d549f000ea5d3f6\", \"Gold Rush Beans (2025)\": \"684c7c71dcf0040008ae0929\", \"Grandprize Summer Squash\": \"684c3ce4dcf004000cae0cce\", \"Green Beans\": \"685c04fae5911400106a925c\", \"Greenhouse Cucumbers\": \"67ab66961e9dad00080b99fc\", \"Greenhouse Tomato\": \"67a67a873a7575000815cecf\", \"Hardneck Garlic\": \"6849b25c6bf41d000cc864ae\", \"Heirloom & Field Tomatoes\": \"67c4b76f8038e30008c0abe6\", \"Hot Peppers\": \"68017ee11e1f00000f1102d3\", \"Kabocha Squash\": \"687135fd379c850021355504\", \"Kale\": \"67c4b801d17b1e0012676cde\", \"Kennebec Potatoes\": \"6877cc98012e4f000bcab1ff\", \"Kohlrabi\": \"67c4e0d1d17b1e000b676984\", \"Lehigh Potatoes\": \"6880f270ca68a4000d39034d\", \"Lettuce\": \"67c4b9788038e30014c0ad4c\", \"Ministry Baked Goods\": \"69026e2a77b57bbe30bbcf1a\", \"Ministry Beef\": \"67a578fa3a7575000f15c956\", \"Ministry Chicken\": \"67fd2ec04c2c08000a4e0f40\", \"Ministry Eggs\": \"67fd30805ba4920008c5f8ad\", \"Ministry Pork\": \"67b4a6d2ca68a4000821a803\", \"Ministry Venison\": \"67a57ea53a7575000815c98e\", \"Mistake\": \"68824c6f4f2d350017101374\", \"Okra\": \"67c4e22bd17b1e0008676ad5\", \"Peanuts\": \"68017ea8598e8e000ce50d5c\", \"Pontiac Red Potatoes\": \"684b1ab190a6dd000b0ab457\", \"Pumpkins\": \"68017c651e1f00000811072b\", \"Radishes\": \"67c4e09f8038e30014c0ae01\", \"Raspberries\": \"67bf805756ff1d000829401e\", \"Red Onions\": \"67c4b6e88038e30008c0abd4\", \"Seasonal Produce - August\": \"689f60fd11aa992057c25043\", \"Seasonal Produce - July\": \"68c97699cc6e441327310afe\", \"Seasonal Produce - June\": \"6849ee4f0c3c6a000bb89339\", \"Seasonal Produce - October\": \"68f7b687fc9226a147c00652\", \"Seasonal Produce - September\": \"68c976c779e3c0c2a7c3e8b7\", \"Serrano Peppers\": \"67c4ba8ad17b1e000b67693d\", \"Snap Pea\": \"684c7ebbdcf004000cae11ad\", \"Softneck Garlic\": \"6849b2326bf41d000cc864ad\", \"Spaghetti Squash\": \"6893a5071c7e1636e0b6c7b7\", \"Spinach\": \"681b8ba42a8dec000bfcf7c1\", \"Strawberries\": \"681b714d3501e90008dbb96a\", \"Sweet Potatoes\": \"67e6caf1453ea0000f9e5aae\", \"Swiss Chard\": \"67c4b8438038e30008c0ac22\", \"Tomatillos\": \"68640685779b650012fdc433\", \"Turnips and Greens\": \"67a67b883a7575000f15cd5c\", \"Watermelons\": \"68016f1e1e1f00000f11024d\", \"White Onions\": \"67c4b633d17b1e0012676c50\", \"Yellow Summer Squash\": \"684c7a3b90a6dd000b0aca9c\", \"Yukon Gold Potatoes\": \"67c4e13dd17b1e000b676987\", \"Zucchini\": \"68016dd21e1f000008110580\"};\nconst MONTHS = ['January','February','March','April','May','June','July',\n  'August','September','October','November','December'];\n\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst weight = parsed.weight_lbs;\n\n// Nothing to log for an empty zone or an unusable reading.\nif (typeof weight !== 'number' || !(weight > 0)) {\n  return [{ json: { __skip: true, reason: 'no positive weight to log' } }];\n}\n\nconst norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n// What the volunteer TYPED wins over what the model guessed. Their existing\n// logs name specific products ('Kale'), and a person who typed the item is\n// better evidence than a generic classification like 'produce'.\nconst candidates = [parsed.description, parsed.item_type]\n  .map(norm).filter((v) => v && v.length > 2);\nlet productId = null, productName = null;\nfor (const wanted of candidates) {\n  for (const [name, id] of Object.entries(PRODUCTS)) {\n    if (norm(name) === wanted) { productId = id; productName = name; break; }\n  }\n  if (productId) break;\n}\nfor (const wanted of candidates) {\n  if (productId) break;\n  {\n  if (!productId) {                       // contains-match, longest name wins\n    // Seasonal buckets are EXCLUDED here: a generic item_type like 'produce'\n    // substring-matches every 'Seasonal Produce - <Month>' entry and would pick\n    // an arbitrary (wrong) month. They are only ever used as the explicit\n    // current-month fallback below. [fixed 2026-08-02]\n    let best = 0;\n    for (const [name, id] of Object.entries(PRODUCTS)) {\n      if (name.startsWith('Seasonal Produce')) continue;\n      const n = norm(name);\n      if (n && (n.includes(wanted) || wanted.includes(n)) && n.length > best) {\n        best = n.length; productId = id; productName = name;\n      }\n    }\n  }\n  }\n}\n// Fall back to the month bucket Cul2vate already uses for mixed loads.\nif (!productId) {\n  const bucket = 'Seasonal Produce - ' + MONTHS[new Date().getMonth()];\n  if (PRODUCTS[bucket]) { productId = PRODUCTS[bucket]; productName = bucket; }\n}\nif (!productId) {\n  return [{ json: { __skip: true, reason: 'no product match and no month bucket' } }];\n}\n\nconst today = new Date().toISOString().slice(0, 10);\nreturn [{ json: {\n  __skip: false,\n  product_name: productName,\n  order_body: {\n    status: 'Draft',\n    order_date: today,\n    // Client-facing text. Operational only: no model names, no confidence\n    // scores, nothing that reads as machine-generated commentary.\n    note: 'Dock intake - ' + (parsed.item_type || 'produce') + ' - ref ' +\n          String(parsed.donation_id || '').slice(0, 8),\n    order_items: [{\n      product_id: productId,\n      qty: String(Math.round(weight * 100) / 100),   // MUST be a string\n      price: '0.00'                                   // MUST be a string\n    }]\n  }\n}}];"
+          "jsCode": "// Resolve the donation to a Farmbrite product and build a Draft order.\nconst PRODUCTS = {\"Acorn Squash\": \"68016e831e1f000008110583\", \"Adirondack Blue Potatoes\": \"685c02f56544a6000f3f751b\", \"Banana Peppers\": \"67c4b3c4d17b1e0008676a9c\", \"Beans\": \"68017a88598e8e000ce50ce2\", \"Beets\": \"67c4b7c6d17b1e0012676cd8\", \"Bell Peppers\": \"67d84f1d3e1b52000b5639e2\", \"Blackberries\": \"67bf7b40a7ec08000cdd7bc2\", \"Blackberry, Prime Ark Freedom\": \"67bf7ecb56ff1d000829401a\", \"Blueberries\": \"67c0dbb356ff1d000829502c\", \"Bok Choy\": \"68813f486609ae000df70d38\", \"Broccoli\": \"67c4b3f5d17b1e0012676b5a\", \"Brussels\": \"68017d86598e8e0013e50a21\", \"Burbank Russet Potatoes\": \"6877d6c1012e4f0008cab97b\", \"Butternut Squash\": \"68891e79f87924001c278829\", \"Cabbage\": \"67c4b379d17b1e0012676b58\", \"Cantaloupe\": \"68017a4c598e8e0013e50a17\", \"Carrots\": \"67c4e06ed17b1e000b676981\", \"Cauliflower\": \"67c4b8b98038e30008c0ac26\", \"Cherry Tomatoes\": \"6863e8ed4c2c080008f6176e\", \"Chives\": \"67c4dfe6d17b1e0012676e12\", \"Collards\": \"67c4b9dad17b1e000b676939\", \"Community Garden Produce\": \"683615bc9685a100081209f1\", \"Corn\": \"687fa362ca68a4000d38f9de\", \"Eggplant\": \"68b75365dc56b597cf02dce6\", \"Fingerling Potatoes\": \"6863e2284c2c08000df61298\", \"Garlic Scapes\": \"682cba030d549f000ea5d3f6\", \"Gold Rush Beans (2025)\": \"684c7c71dcf0040008ae0929\", \"Grandprize Summer Squash\": \"684c3ce4dcf004000cae0cce\", \"Green Beans\": \"685c04fae5911400106a925c\", \"Greenhouse Cucumbers\": \"67ab66961e9dad00080b99fc\", \"Greenhouse Tomato\": \"67a67a873a7575000815cecf\", \"Hardneck Garlic\": \"6849b25c6bf41d000cc864ae\", \"Heirloom & Field Tomatoes\": \"67c4b76f8038e30008c0abe6\", \"Hot Peppers\": \"68017ee11e1f00000f1102d3\", \"Kabocha Squash\": \"687135fd379c850021355504\", \"Kale\": \"67c4b801d17b1e0012676cde\", \"Kennebec Potatoes\": \"6877cc98012e4f000bcab1ff\", \"Kohlrabi\": \"67c4e0d1d17b1e000b676984\", \"Lehigh Potatoes\": \"6880f270ca68a4000d39034d\", \"Lettuce\": \"67c4b9788038e30014c0ad4c\", \"Ministry Baked Goods\": \"69026e2a77b57bbe30bbcf1a\", \"Ministry Beef\": \"67a578fa3a7575000f15c956\", \"Ministry Chicken\": \"67fd2ec04c2c08000a4e0f40\", \"Ministry Eggs\": \"67fd30805ba4920008c5f8ad\", \"Ministry Pork\": \"67b4a6d2ca68a4000821a803\", \"Ministry Venison\": \"67a57ea53a7575000815c98e\", \"Mistake\": \"68824c6f4f2d350017101374\", \"Okra\": \"67c4e22bd17b1e0008676ad5\", \"Peanuts\": \"68017ea8598e8e000ce50d5c\", \"Pontiac Red Potatoes\": \"684b1ab190a6dd000b0ab457\", \"Pumpkins\": \"68017c651e1f00000811072b\", \"Radishes\": \"67c4e09f8038e30014c0ae01\", \"Raspberries\": \"67bf805756ff1d000829401e\", \"Red Onions\": \"67c4b6e88038e30008c0abd4\", \"Seasonal Produce - August\": \"689f60fd11aa992057c25043\", \"Seasonal Produce - July\": \"68c97699cc6e441327310afe\", \"Seasonal Produce - June\": \"6849ee4f0c3c6a000bb89339\", \"Seasonal Produce - October\": \"68f7b687fc9226a147c00652\", \"Seasonal Produce - September\": \"68c976c779e3c0c2a7c3e8b7\", \"Serrano Peppers\": \"67c4ba8ad17b1e000b67693d\", \"Snap Pea\": \"684c7ebbdcf004000cae11ad\", \"Softneck Garlic\": \"6849b2326bf41d000cc864ad\", \"Spaghetti Squash\": \"6893a5071c7e1636e0b6c7b7\", \"Spinach\": \"681b8ba42a8dec000bfcf7c1\", \"Strawberries\": \"681b714d3501e90008dbb96a\", \"Sweet Potatoes\": \"67e6caf1453ea0000f9e5aae\", \"Swiss Chard\": \"67c4b8438038e30008c0ac22\", \"Tomatillos\": \"68640685779b650012fdc433\", \"Turnips and Greens\": \"67a67b883a7575000f15cd5c\", \"Watermelons\": \"68016f1e1e1f00000f11024d\", \"White Onions\": \"67c4b633d17b1e0012676c50\", \"Yellow Summer Squash\": \"684c7a3b90a6dd000b0aca9c\", \"Yukon Gold Potatoes\": \"67c4e13dd17b1e000b676987\", \"Zucchini\": \"68016dd21e1f000008110580\"};\nconst MONTHS = ['January','February','March','April','May','June','July',\n  'August','September','October','November','December'];\n\nconst parsed = $('Parse vision + tare + bias').first().json;\nconst weight = parsed.weight_lbs;\n\n// Nothing to log for an empty zone or an unusable reading.\nif (typeof weight !== 'number' || !(weight > 0)) {\n  return [{ json: { __skip: true, reason: 'no positive weight to log' } }];\n}\n\nconst norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n// What the volunteer TYPED wins over what the model guessed. Their existing\n// logs name specific products ('Kale'), and a person who typed the item is\n// better evidence than a generic classification like 'produce'.\nconst candidates = [parsed.description, parsed.item_type]\n  .map(norm).filter((v) => v && v.length > 2);\nlet productId = null, productName = null;\nfor (const wanted of candidates) {\n  for (const [name, id] of Object.entries(PRODUCTS)) {\n    if (norm(name) === wanted) { productId = id; productName = name; break; }\n  }\n  if (productId) break;\n}\nfor (const wanted of candidates) {\n  if (productId) break;\n  {\n  if (!productId) {                       // contains-match, longest name wins\n    // Seasonal buckets are EXCLUDED here: a generic item_type like 'produce'\n    // substring-matches every 'Seasonal Produce - <Month>' entry and would pick\n    // an arbitrary (wrong) month. They are only ever used as the explicit\n    // current-month fallback below. [fixed 2026-08-02]\n    let best = 0;\n    for (const [name, id] of Object.entries(PRODUCTS)) {\n      if (name.startsWith('Seasonal Produce')) continue;\n      const n = norm(name);\n      if (n && (n.includes(wanted) || wanted.includes(n)) && n.length > best) {\n        best = n.length; productId = id; productName = name;\n      }\n    }\n  }\n  }\n}\n// Fall back to the month bucket Cul2vate already uses for mixed loads.\nif (!productId) {\n  const bucket = 'Seasonal Produce - ' + MONTHS[new Date().getMonth()];\n  if (PRODUCTS[bucket]) { productId = PRODUCTS[bucket]; productName = bucket; }\n}\nif (!productId) {\n  return [{ json: { __skip: true, reason: 'no product match and no month bucket' } }];\n}\n\nconst today = new Date().toISOString().slice(0, 10);\nreturn [{ json: {\n  __skip: false,\n  product_name: productName,\n  order_body: {\n    status: 'Draft',\n    order_date: today,\n    // Client-facing text. Operational only: no model names, no confidence\n    // scores, nothing that reads as machine-generated commentary.\n    // Name the resolved PRODUCT, so the note matches the line item a person sees.\n    note: 'Dock intake - ' + productName + ' - ref ' +\n          String(parsed.donation_id || '').slice(0, 8),\n    order_items: [{\n      product_id: productId,\n      qty: String(Math.round(weight * 100) / 100),   // MUST be a string\n      price: '0.00'                                   // MUST be a string\n    }]\n  }\n}}];"
         }
       },
       {
@@ -1641,11 +1642,6 @@
               "node": "Build Farmbrite order",
               "type": "main",
               "index": 0
-            },
-            {
-              "node": "Shape response",
-              "type": "main",
-              "index": 0
             }
           ]
         ]
@@ -1685,7 +1681,13 @@
       },
       "Farmbrite: log order": {
         "main": [
-          []
+          [
+            {
+              "node": "Shape response",
+              "type": "main",
+              "index": 0
+            }
+          ]
         ]
       }
     },
@@ -1696,34 +1698,34 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T01:53:02.337Z",
-        "id": 131,
+        "createdAt": "2026-08-02T02:19:25.193Z",
+        "id": 143,
         "workflowId": "<n8n-workflow-id>",
-        "versionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
+        "versionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
         "event": "activated",
         "userId": "f3884053-3487-475b-859b-c906b72967a7"
       },
       {
-        "createdAt": "2026-08-02T01:53:03.142Z",
-        "id": 133,
+        "createdAt": "2026-08-02T02:19:25.991Z",
+        "id": 145,
         "workflowId": "<n8n-workflow-id>",
-        "versionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
+        "versionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
         "event": "activated",
         "userId": "f3884053-3487-475b-859b-c906b72967a7"
       },
       {
-        "createdAt": "2026-08-02T01:53:02.249Z",
-        "id": 130,
+        "createdAt": "2026-08-02T02:19:25.123Z",
+        "id": 142,
         "workflowId": "<n8n-workflow-id>",
-        "versionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
+        "versionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
         "event": "deactivated",
         "userId": "f3884053-3487-475b-859b-c906b72967a7"
       },
       {
-        "createdAt": "2026-08-02T01:53:03.067Z",
-        "id": 132,
+        "createdAt": "2026-08-02T02:19:25.905Z",
+        "id": 144,
         "workflowId": "<n8n-workflow-id>",
-        "versionId": "ed1b3801-5814-4a95-adaa-2d0582d64851",
+        "versionId": "b19ec9f1-f29d-4e45-9adf-35042bab4565",
         "event": "deactivated",
         "userId": "f3884053-3487-475b-859b-c906b72967a7"
       }

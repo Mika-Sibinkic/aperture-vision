@@ -18,6 +18,7 @@
 // RUN MODES (Scriptable "Parameter", or the Shortcut that calls it):
 //   ""          normal tap: capture -> weight
 //   "selftest"  checks every hop and reports PASS/FAIL in plain language
+//   "history"   recent donations, tap one to undo it
 //   "setup"     re-enter settings (Keychain mode only)
 // ---------------------------------------------------------------------------
 
@@ -27,6 +28,8 @@ const CONFIG = {
   pass: "",
   path: "/ISAPI/Streaming/channels/101/picture",
   relay: "https://<vercel-app-host>/api/donate",
+  exportUrl: "https://<vercel-app-host>/api/export",
+  voidUrl: "https://<vercel-app-host>/api/void",
   location: "Cul2vate, Ellington Ag Center",
   maxPixels: 1600, // longest edge sent upstream; keeps the tap fast on site WiFi
 };
@@ -185,6 +188,8 @@ async function resolveConfig(mode) {
     relay: Keychain.get(KEYS.relay),
     location: Keychain.contains(KEYS.location) ? Keychain.get(KEYS.location) : CONFIG.location,
     maxPixels: CONFIG.maxPixels,
+    exportUrl: CONFIG.exportUrl,
+    voidUrl: CONFIG.voidUrl,
   };
 }
 
@@ -431,11 +436,82 @@ async function runDonation(cfg) {
   }
 }
 
+// Recent log with one-tap undo. Mis-taps happen on a dock — wrong item typed, photo
+// taken before the load was staged, a duplicate. Without this the only fix is asking
+// someone to hand-edit a spreadsheet later, which never happens.
+async function showHistory(cfg) {
+  const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
+  req.timeoutInterval = 60;
+  let rows = [];
+  try {
+    const data = await req.loadJSON();
+    rows = Array.isArray(data.rows) ? data.rows : [];
+  } catch (e) {
+    await showError("Couldn't load the recent log: " + (e.message || e));
+    return;
+  }
+  rows.reverse();                                   // newest first
+  const recent = rows.slice(0, 25);
+
+  const t = new UITable();
+  t.showSeparators = true;
+  const draw = () => {
+    t.removeAllRows();
+    const h = t.addRow();
+    h.isHeader = true;
+    h.height = 60;
+    h.addText("Recent donations", recent.length ? "Tap one to undo it" : "Nothing logged yet");
+    for (const r of recent) {
+      const row = new UITableRow();
+      row.height = 58;
+      const when = String(r.triggered_at || "").replace("T", " ").slice(5, 16);
+      const lbs = typeof r.weight_lbs === "number" ? r.weight_lbs.toFixed(1) + " lbs" : "—";
+      row.addText(`${lbs}  ${r.item_type || ""}`.trim(), `${when}   ${r.description || ""}`.trim());
+      row.onSelect = async () => {
+        const a = new Alert();
+        a.title = "Undo this donation?";
+        a.message = `${lbs} ${r.item_type || ""}\n${when}\n\nIt will be removed from the record and from Farmbrite. The photo is kept.`;
+        a.addDestructiveAction("Undo it");
+        a.addCancelAction("Keep it");
+        if ((await a.present()) !== 0) return;
+
+        const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
+        v.method = "POST";
+        v.timeoutInterval = 60;
+        v.headers = { "Content-Type": "application/json" };
+        v.body = JSON.stringify({ donation_id: r.donation_id, reason: "undone on the iPad" });
+        try {
+          const res = await v.loadJSON();
+          const done = new Alert();
+          done.title = res && res.ok ? "Removed" : "Couldn't remove it";
+          done.message = res && res.ok
+            ? "That donation is no longer in the record."
+            : String((res && res.error) || "Unknown problem.");
+          done.addAction("OK");
+          await done.present();
+          if (res && res.ok) {
+            const i = recent.indexOf(r);
+            if (i >= 0) recent.splice(i, 1);
+            draw();
+          }
+        } catch (e) {
+          await showError("Couldn't remove it: " + (e.message || e));
+        }
+      };
+      t.addRow(row);
+    }
+    t.reload();
+  };
+  draw();
+  await t.present();
+}
+
 async function main() {
   const mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "").toString().trim().toLowerCase();
   const cfg = await resolveConfig(mode);
 
   if (mode === "selftest") { await selfTest(cfg); Script.complete(); return; }
+  if (mode === "history" || mode === "undo") { await showHistory(cfg); Script.complete(); return; }
   if (mode === "reset") {                      // clears a stuck lock; never needed normally
     writeState({ inFlightAt: null, inFlightId: null });
     const a = new Alert(); a.title = "Aperture reset"; a.message = "Ready for the next donation."; a.addAction("OK");
