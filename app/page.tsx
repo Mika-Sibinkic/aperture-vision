@@ -76,7 +76,7 @@ export default function Home() {
       </div>
 
       <button className="trigger" onClick={trigger} disabled={disabled}>
-        {phase === "sending" ? "Analyzing…" : "Log Donation"}
+        {phase === "sending" ? "Weighing…" : "Log Donation"}
       </button>
 
       <div className="card status" aria-live="polite">
@@ -90,7 +90,7 @@ export default function Home() {
           <>
             <div className="row">
               <div className="spinner" />
-              <div className="v">Reading the camera. One moment.</div>
+              <div className="v">Weighing. One moment.</div>
             </div>
             <div className="muted">Usually about 4 to 10 seconds.</div>
           </>
@@ -106,20 +106,6 @@ export default function Home() {
             <div className="row">
               <span className="k">Item</span>
               <span className="v">{result.item_type ?? "unspecified"}</span>
-            </div>
-            <div className="row">
-              <span className="k">Confidence</span>
-              <span className="v">
-                {result.confidence !== null
-                  ? `${Math.round(result.confidence * 100)}%`
-                  : "unknown"}
-              </span>
-            </div>
-            <div className="row">
-              <span className="k">ChArUco</span>
-              <span className="v">
-                {result.charuco_detected ? "calibrated" : "fallback scale"}
-              </span>
             </div>
             {result.farmbrite_id && (
               <div className="row">

@@ -2,8 +2,7 @@
 
 **Time: ~10 minutes. Nothing to type. Nothing to configure.**
 
-Everything server-side is already live and tested end-to-end (Vercel, n8n, NVIDIA
-NIM vision, Google Sheet). The only thing that has never run on this iPad is the
+Everything on the server side is already live and tested end to end. The only thing that has never run on this iPad is the
 camera pull, and step 3 proves it in one tap before any volunteer sees it.
 
 ---
@@ -39,9 +38,9 @@ In Scriptable, long-press **Aperture** → **Run with Parameter** → type `self
 You'll get a checklist:
 
 ```
-✅ Camera reachable + password accepted     412 KB
-✅ Photo prepared for upload                268 KB
-✅ Weight came back + row logged            0.0 lbs empty
+✅ Camera connected                         412 KB
+✅ Photo ready                              268 KB
+✅ Weight recorded                          0.0 lbs empty
 ✅ ALL GOOD — ready for volunteers
 ```
 
@@ -49,7 +48,7 @@ You'll get a checklist:
 - **Any ❌ → stop and do the one thing next to it** (see the short list below).
   Don't debug anything else; every other hop is already proven.
 
-The self-test writes one row to the Sheet labelled `SELF-TEST — ignore this row`.
+The self-test writes one row labelled `SYSTEM CHECK — ignore this row`.
 Delete it later if you care; it's harmless.
 
 ### 4. Make it the "app" for volunteers
@@ -68,7 +67,7 @@ weight in about 12 seconds.
 ## What to tell the volunteers
 
 > Put the donation inside the yellow tape. Tap **Aperture**. Wait for the weight.
-> That's it — it's already recorded.
+> That's it — it's recorded.
 
 ---
 
@@ -78,7 +77,7 @@ weight in about 12 seconds.
 |---|---|
 | ❌ Camera — *can't reach the camera* | The iPad is on the wrong Wi-Fi. Switch it to the Cul2vate network and run the self-test again. |
 | ❌ Camera — *rejected the saved password* | The camera password changed. Text Mika; he regenerates the file in 1 minute. |
-| ❌ Server — anything | The internet at the site is down, or the vision service is briefly out. Wait 60 seconds, run the self-test again. If it fails twice, text Mika — nothing on the iPad is wrong. |
+| ❌ Server — anything | The site internet is down, or the service is briefly out. Wait 60 seconds and run the self-test again. If it fails twice, text Mika — nothing on the iPad is wrong. |
 
 That's the whole list. There is no other failure mode to chase: the camera hop is
 the only piece that isn't already verified from off-site.
@@ -90,6 +89,6 @@ the only piece that isn't already verified from off-site.
 - A tap takes **~12 seconds** end to end.
 - The iPad is **not** a server. It only pulls the frame while you're looking at it,
   which is why nothing has to stay running when the iPad sleeps.
-- Every tap writes a row to the **Donations** sheet. Weight, item, confidence, and
-  the model version are all logged, so accuracy work later is just reading history.
+- Every tap writes a row to the **Donations** sheet, so the full intake history is
+  always available to export.
 - If the iPad is off or asleep, nothing breaks — the next tap works normally.
