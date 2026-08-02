@@ -302,10 +302,10 @@ async function showResult(result) {
   const hasWeight = result && typeof result.weight_lbs === "number";
   head.addText(hasWeight ? result.weight_lbs.toFixed(1) + " lbs" : "Logged");
   const add = (k, v) => { const r = t.addRow(); r.addText(String(k)); r.addText(v == null ? "—" : String(v)); };
+  // Client-facing screen: the weight IS the record. No model scores, no internal
+  // diagnostics — those stay in the operator's export, not in front of volunteers.
   add("Item", result.item_type);
-  if (typeof result.confidence === "number") add("Confidence", Math.round(result.confidence * 100) + "%");
-  add("Scale reference", result.charuco_detected ? "calibrated board" : "fallback");
-  if (result.notes) add("Notes", result.notes);
+  add("Recorded", new Date().toLocaleTimeString());
   await t.present();
 }
 
@@ -332,7 +332,7 @@ async function selfTest(cfg) {
   let frame = null;
   try {
     frame = await grabFrame(cfg);
-    steps.push({ ok: true, name: "Camera reachable + password accepted", detail: Math.round(frame.toBase64String().length / 1024) + " KB" });
+    steps.push({ ok: true, name: "Camera connected", detail: Math.round(frame.toBase64String().length / 1024) + " KB" });
   } catch (e) {
     steps.push({ ok: false, name: "Camera", detail: String(e.message).split("\n")[0] });
     render();
@@ -341,13 +341,13 @@ async function selfTest(cfg) {
   render();
 
   const small = shrink(frame, cfg.maxPixels);
-  steps.push({ ok: true, name: "Photo prepared for upload", detail: Math.round(small.toBase64String().length / 1024) + " KB" });
+  steps.push({ ok: true, name: "Photo ready", detail: Math.round(small.toBase64String().length / 1024) + " KB" });
   render();
 
   try {
-    const res = await postToRelay(cfg, small.toBase64String(), "SELF-TEST — ignore this row");
+    const res = await postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK — ignore this row");
     const ok = res && (typeof res.weight_lbs === "number" || res.item_type);
-    steps.push({ ok: ok, name: "Weight came back + row logged",
+    steps.push({ ok: ok, name: "Weight recorded",
                  detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
   } catch (e) {
     steps.push({ ok: false, name: "Server", detail: String(e.message).slice(0, 90) });
@@ -404,12 +404,12 @@ async function runDonation(cfg) {
   writeState({ inFlightAt: now, inFlightId: donationId });
 
   const ui = progressTable();
-  ui.render(["Reading the camera…"], "Working");
+  ui.render(["Reading the camera…"], "Weighing");
   ui.table.present(false);
 
   try {
     const frame = await withRetry("camera", () => grabFrame(cfg));
-    ui.render(["✅ Photo captured", "Estimating the weight…", "", "This takes about 10–25 seconds."], "Working");
+    ui.render(["Photo captured", "Weighing…", "", "This takes about 10–25 seconds."], "Weighing");
 
     const small = shrink(frame, cfg.maxPixels);
     const result = await withRetry("relay", () => postToRelay(cfg, small.toBase64String(), "", donationId));
