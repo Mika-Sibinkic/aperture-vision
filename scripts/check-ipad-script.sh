@@ -15,7 +15,7 @@ case "$FILE" in /*) ABS="$FILE" ;; *) ABS="$PWD/$FILE" ;; esac
 node --check "$ABS"
 echo "syntax ......... ok"
 
-for f in chooseMode runDonation showHistory selfTest finishAlert progressTable \
+for f in runApp apertureHTML chooseMode runDonation showHistory selfTest finishAlert progressTable \
          grabFrame postToRelay withTimeout showResult showError resolveConfig \
          runSetup shrink withRetry readState writeState statePath headerLookup \
          md5 parseAuthHeader buildDigestAuth main; do
@@ -39,7 +39,7 @@ const g={Alert:stub,UITable:stub,UITableRow:stub,Request:stub,Data:stub,Image:st
  FileManager:{local:()=>({joinPath:(a,b)=>b,fileExists:()=>false,readString:()=>"{}",writeString:noop,libraryDirectory:()=>"/"})},
  Timer:{schedule:noop},Script:{complete:noop},config:{runsInApp:false},args:{},console,log:noop,logError:noop};
 vm.createContext(g);
-vm.runInContext(src+"\n;globalThis.__p=[chooseMode,runDonation,showHistory,selfTest,main].map(f=>typeof f);",g,{timeout:5000});
+vm.runInContext(src+"\n;globalThis.__p=[runApp,apertureHTML,chooseMode,runDonation,showHistory,selfTest,main].map(f=>typeof f);",g,{timeout:5000});
 if(g.__p.some(t=>t!=="function")) { console.error("ENTRY POINT NOT A FUNCTION:",g.__p.join(",")); process.exit(1); }
 ' "$ABS"
 echo "runtime load ... ok"

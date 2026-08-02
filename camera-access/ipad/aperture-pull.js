@@ -545,6 +545,193 @@ async function showHistory(cfg) {
   await t.present();
 }
 
+// ---------------------------------------------------------------------------
+// The Aperture front end.
+//
+// Scriptable's Alert/UITable are system dialogs — functional, but they are not an
+// app. WebView renders real HTML full-screen, so the volunteer gets the same
+// interface the PWA had (cream + sage, one big button, a result card, and a recent
+// list they can undo from) with the camera pull happening natively underneath.
+//
+// Bridge: the page stashes an action in window.__pending; the script parks on
+// evaluateJavaScript(..., true) until the page calls completion(). One event pump,
+// no polling.
+// ---------------------------------------------------------------------------
+function apertureHTML(location) {
+  return `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>
+:root{--bg:#f7f4ee;--card:#fff;--ink:#2a2925;--muted:#7a7268;--accent:#86b187;
+--accent-pressed:#6b9b6e;--danger:#c24848;--border:#e7e2d6;--radius:22px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+font-family:-apple-system,BlinkMacSystemFont,"SF Pro","Helvetica Neue",Arial,sans-serif;
+-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none}
+main{min-height:100vh;padding:28px 22px 32px;display:flex;flex-direction:column;gap:18px;max-width:760px;margin:0 auto}
+.header{display:flex;align-items:baseline;justify-content:space-between}
+.brand{font-size:24px;font-weight:600;letter-spacing:.5px}
+.loc{font-size:13px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:8px}
+input.item{width:100%;font-size:20px;padding:14px 16px;border:1px solid var(--border);
+border-radius:16px;background:#fdfcf9;color:var(--ink);-webkit-user-select:text;user-select:text}
+button.trigger{width:100%;padding:26px;font-size:26px;font-weight:600;color:#fff;background:var(--accent);
+border:none;border-radius:var(--radius);transition:background .12s}
+button.trigger:active{background:var(--accent-pressed)}
+button.trigger:disabled{opacity:.55}
+.headline{font-size:44px;font-weight:650;letter-spacing:-1px;margin-bottom:4px}
+.ok{color:var(--accent-pressed)} .err{color:var(--danger)}
+.row{display:flex;justify-content:space-between;padding:7px 0;font-size:16px;border-top:1px solid var(--border)}
+.row:first-of-type{border-top:none}
+.k{color:var(--muted)} .muted{color:var(--muted);font-size:15px;line-height:1.45}
+.spin{width:20px;height:20px;border:3px solid var(--border);border-top-color:var(--accent);
+border-radius:50%;display:inline-block;animation:s .8s linear infinite;vertical-align:-4px;margin-right:10px}
+@keyframes s{to{transform:rotate(360deg)}}
+.hist{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-top:1px solid var(--border)}
+.hist:first-child{border-top:none}
+.hw{font-weight:600;font-size:17px} .hi{color:var(--muted);font-size:14px}
+.undo{color:var(--danger);font-size:15px;padding:8px 14px;border:1px solid var(--border);border-radius:12px;background:#fff}
+h2{font-size:15px;color:var(--muted);font-weight:500;margin:4px 0 0}
+</style></head><body><main>
+<div class="header"><div class="brand">APERTURE</div><div class="loc">${location}</div></div>
+
+<div class="card">
+  <label for="item">What is the donation?</label>
+  <input class="item" id="item" placeholder="e.g. Kale" autocapitalize="words" autocorrect="off">
+</div>
+
+<button class="trigger" id="go">Log Donation</button>
+
+<div class="card" id="status">
+  <div class="muted">Place the donation inside the taped zone, type what it is, then press the green button.</div>
+</div>
+
+<h2 id="rechead" style="display:none">Recent</h2>
+<div class="card" id="recent" style="display:none"></div>
+
+<script>
+var pending=null, resolve=null;
+function send(a){ pending=a; if(resolve){var r=resolve; resolve=null; var p=pending; pending=null; r(p);} }
+function onAsk(c){ if(pending){var p=pending; pending=null; c(p);} else { resolve=c; } }
+
+document.getElementById('go').onclick=function(){
+  var item=document.getElementById('item').value.trim();
+  setBusy('Reading the camera…');
+  send({type:'log', item:item});
+};
+
+function setBusy(msg){
+  document.getElementById('go').disabled=true;
+  document.getElementById('go').textContent='Working…';
+  document.getElementById('status').innerHTML=
+    '<div><span class="spin"></span>'+msg+'</div><div class="muted" style="margin-top:8px">Usually about 10 to 25 seconds.</div>';
+}
+function setStep(msg){
+  var s=document.getElementById('status');
+  if(s) s.innerHTML='<div><span class="spin"></span>'+msg+'</div><div class="muted" style="margin-top:8px">Usually about 10 to 25 seconds.</div>';
+}
+function showResult(r){
+  document.getElementById('go').disabled=false;
+  document.getElementById('go').textContent='Log Donation';
+  document.getElementById('item').value='';
+  var h = (r.weight_lbs!==null && r.weight_lbs!==undefined) ? Number(r.weight_lbs).toFixed(1)+' lbs' : 'Logged';
+  var html='<div class="headline ok">'+h+'</div>';
+  if(r.item_type) html+='<div class="row"><span class="k">Item</span><span>'+r.item_type+'</span></div>';
+  html+='<div class="row"><span class="k">Recorded</span><span>'+new Date().toLocaleTimeString()+'</span></div>';
+  if(r.empty) html='<div class="headline err">Nothing in the zone</div><div class="muted">Place the donation inside the yellow tape and press the button again.</div>';
+  document.getElementById('status').innerHTML=html;
+}
+function showError(m){
+  document.getElementById('go').disabled=false;
+  document.getElementById('go').textContent='Log Donation';
+  document.getElementById('status').innerHTML='<div class="headline err">Didn\\u2019t work</div><div class="muted">'+m+'</div>';
+}
+function showRecent(rows){
+  var box=document.getElementById('recent'), head=document.getElementById('rechead');
+  if(!rows||!rows.length){ box.style.display='none'; head.style.display='none'; return; }
+  head.style.display='block'; box.style.display='block';
+  box.innerHTML=rows.map(function(r){
+    var w=(r.weight_lbs!==null&&r.weight_lbs!==undefined)?Number(r.weight_lbs).toFixed(1)+' lbs':'—';
+    return '<div class="hist"><div><div class="hw">'+w+' '+(r.item_type||'')+'</div>'+
+           '<div class="hi">'+(r.when||'')+'</div></div>'+
+           '<button class="undo" onclick="undo(\\''+r.donation_id+'\\')">Undo</button></div>';
+  }).join('');
+}
+function undo(id){ setBusy('Removing…'); send({type:'undo', id:id}); }
+</script></main></body></html>`;
+}
+
+async function runApp(cfg) {
+  const wv = new WebView();
+  await wv.loadHTML(apertureHTML(cfg.location));
+  wv.present(true);
+
+  const call = (js) => wv.evaluateJavaScript(js, false);
+  const refresh = async () => {
+    try {
+      const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
+      req.timeoutInterval = 30;
+      const data = await req.loadJSON();
+      const rows = (Array.isArray(data.rows) ? data.rows : []).slice(-8).reverse().map((r) => ({
+        donation_id: r.donation_id,
+        weight_lbs: r.weight_lbs,
+        item_type: r.item_type,
+        when: String(r.triggered_at || "").replace("T", " ").slice(5, 16),
+      }));
+      await call("showRecent(" + JSON.stringify(rows) + ")");
+    } catch (e) { /* the recent list is a convenience; never block on it */ }
+  };
+  await refresh();
+
+  // Event pump: park until the page hands over an action.
+  for (;;) {
+    const action = await wv.evaluateJavaScript(
+      "onAsk(function(a){ completion(a) })", true);
+    if (!action) continue;
+
+    if (action.type === "log") {
+      try {
+        const state = readState();
+        if (state.inFlightAt && Date.now() - state.inFlightAt < IN_FLIGHT_WINDOW_MS) {
+          await call("showError('Still logging the last donation \\u2014 give it a few seconds.')");
+          continue;
+        }
+        const donationId = UUID.string().toLowerCase();
+        writeState({ inFlightAt: Date.now(), inFlightId: donationId });
+
+        const frame = await withRetry("camera", () => withTimeout(grabFrame(cfg), 25, "Camera"));
+        await call("setStep('Weighing\\u2026')");
+        const small = shrink(frame, cfg.maxPixels);
+        const result = await withRetry("relay", () =>
+          withTimeout(postToRelay(cfg, small.toBase64String(), action.item || "", donationId), 90, "Server"));
+
+        const isEmpty = result && (result.item_type === "empty" || result.weight_lbs === 0);
+        writeState({ inFlightAt: null, inFlightId: null });
+        await call("showResult(" + JSON.stringify(Object.assign({}, result, { empty: isEmpty })) + ")");
+        await refresh();
+      } catch (e) {
+        writeState({ inFlightAt: null, inFlightId: null });
+        await call("showError(" + JSON.stringify(String(e && e.message ? e.message : e)) + ")");
+      }
+    } else if (action.type === "undo") {
+      try {
+        const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
+        v.method = "POST";
+        v.timeoutInterval = 90;
+        v.headers = { "Content-Type": "application/json" };
+        v.body = JSON.stringify({ donation_id: action.id, reason: "undone on the iPad" });
+        const res = await v.loadJSON();
+        await call(res && res.ok
+          ? "showResult({weight_lbs:null,item_type:null})"
+          : "showError('Could not remove that entry.')");
+        await refresh();
+      } catch (e) {
+        await call("showError(" + JSON.stringify(String(e && e.message ? e.message : e)) + ")");
+      }
+    }
+  }
+}
+
 // Operator menu — only ever shown when opened from inside the Scriptable app.
 async function chooseMode() {
   const a = new Alert();
@@ -587,7 +774,8 @@ async function main() {
     await a.present(); Script.complete(); return;
   }
 
-  await runDonation(cfg);
+  // Default: the full front end. runDonation() remains for the bare one-shot path.
+  await runApp(cfg);
   Script.complete();
 }
 

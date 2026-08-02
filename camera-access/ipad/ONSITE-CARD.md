@@ -67,9 +67,8 @@ route avoids the whole mechanism. [Observed on the iPad 2026-08-02]
 2. **+** → search **Scriptable** → add **Run Script**.
 3. **Script** → **Aperture**.
 4. Under **Texts**, tap **Add new item** and type: `log`
-   REQUIRED. Without a parameter the script sees "opened in the app" and shows the
-   operator menu (System check / Recent log), which volunteers must never get. `log`
-   sends it straight to logging a donation. [VERIFIED 2026-08-02]
+   REQUIRED. Without a parameter the script shows the operator menu instead of the
+   app. `log` opens the Aperture front end. [VERIFIED 2026-08-02]
 5. Turn **Run in App** ON — required, because the script presents alerts and tables.
 6. Leave **Show When Run** ON.
 7. Name it **Aperture**, pick an icon.
@@ -91,8 +90,13 @@ weight in about 12 seconds.
 
 ## What to tell the volunteers
 
-> Put the donation inside the yellow tape. Tap **Aperture**. Wait for the weight.
-> That's it — it's recorded.
+> Put the donation inside the yellow tape. Tap **Aperture**. Type what it is.
+> Press the green button and wait for the weight. That's it — it's recorded.
+> If you log something by mistake, press **Undo** next to it in the Recent list.
+
+The app is a real screen, not a system popup: APERTURE header, an item box, one big
+green button, the weight in large type, and a **Recent** list with an **Undo** button
+on each entry. Volunteers never need the Scriptable app.
 
 ---
 
