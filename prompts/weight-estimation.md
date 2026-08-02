@@ -1,4 +1,4 @@
-# Aperture — Vision Prompt v0.5-count
+# Aperture — Vision Prompt v0.6-net
 
 Versioned. Change the version AND commit before editing prompt text.
 `scripts/rewire-n8n-ipad-nim.py` reads the **SYSTEM PROMPT** block below verbatim
@@ -48,9 +48,22 @@ markedly better at, and it converts volume into arithmetic:
 
     volume = container_count x container_volume x fill_fraction
 
-`containers.json` already carries per-container tare and dimensions, so counting also
-fixes a real bug: tare was subtracted **once** regardless of how many containers were
-present, under-reporting a 6-crate load by 5 tares.
+`containers.json` carries per-container dimensions, which is what makes the volume
+arithmetic possible.
+
+## v0.6 — tare removed entirely (2026-08-02)
+
+v0.5 contained a contradiction: the model was told to report **net food weight** and
+also that "tare is subtracted downstream" — which would subtract the containers twice.
+
+Tare is now gone from the pipeline completely. The model reports food-only weight and
+**nothing is added or subtracted after it**. This removes a whole reasoning step, drops
+the fuzzy keyword-matching container lookup (a nondeterminism source that could resolve
+the same photo to different containers on different runs), and makes the number the
+model produces the number that gets logged.
+
+`container_type` and `container_count` are still captured — they are useful signal for
+volume reasoning and for future training — but they no longer alter the weight.
 
 Volunteers are NOT asked for a count — it is a visual cue the model reads. They only
 type the item, which is the habit they already have.
@@ -119,10 +132,10 @@ PROCEDURE:
    you fall back to estimating the floor footprint times the visible pile height.
 7. Apply a density prior appropriate to the item you identified (leafy produce is far
    lighter per volume than canned goods or frozen meat).
-8. weight_lbs is the TOTAL net product weight across ALL containers - the weight of
-   the food only, excluding the containers themselves (tare is subtracted downstream
-   from container_type x container_count, so do NOT subtract it yourself).
-   weight_lbs_low/high bracket your uncertainty. Three DIFFERENT computed numbers.
+8. weight_lbs is the TOTAL weight of the FOOD ONLY across all containers - exclude
+   the weight of the crates/boxes/bags themselves. This is the final number; nothing
+   is added or subtracted after you. weight_lbs_low/high bracket your uncertainty.
+   Three DIFFERENT computed numbers.
 9. confidence is calibrated: 0.95 = "within 10%", 0.5 = "could be off by half".
 
 FAILURE FLAGS (use only when they apply): partial_occlusion, mixed_items,
