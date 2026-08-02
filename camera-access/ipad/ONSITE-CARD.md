@@ -66,9 +66,14 @@ route avoids the whole mechanism. [Observed on the iPad 2026-08-02]
 1. Open the **Shortcuts** app.
 2. **+** → search **Scriptable** → add **Run Script**.
 3. **Script** → **Aperture**.
-4. Turn **Run in App** ON — required, because the script presents alerts and tables.
-5. Name it **Aperture**, pick an icon.
-6. Share icon → **Add to Home Screen** → **Add**.
+4. Under **Texts**, tap **Add new item** and type: `log`
+   REQUIRED. Without a parameter the script sees "opened in the app" and shows the
+   operator menu (System check / Recent log), which volunteers must never get. `log`
+   sends it straight to logging a donation. [VERIFIED 2026-08-02]
+5. Turn **Run in App** ON — required, because the script presents alerts and tables.
+6. Leave **Show When Run** ON.
+7. Name it **Aperture**, pick an icon.
+8. Share icon → **Add to Home Screen** → **Add**.
 - The Home Screen icon runs the donation flow **directly** — one tap, no menu. That is
   what volunteers use. The menu (System check / Recent log) only ever appears when the
   script is opened inside the Scriptable app, which is the operator path.

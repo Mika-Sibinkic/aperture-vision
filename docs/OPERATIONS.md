@@ -131,6 +131,11 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 - **Scriptable has no "Run with Parameter" menu item.** Modes are chosen by the in-app
   menu (`config.runsInApp`) or the URL scheme `scriptable:///run/Aperture?parameter=…`,
   which arrives in `args.queryParameters` — NOT `shortcutParameter`.
+- **The volunteer shortcut MUST pass the text `log` as its parameter.** With no
+  parameter, `config.runsInApp` is true when launched via Shortcuts with Run In App
+  ON, so the script shows the OPERATOR menu instead of logging. `log` is not a special
+  mode — it is simply non-empty, which skips the menu and falls through to the
+  donation path.
 - **Home Screen icon: use the Shortcuts app**, not Scriptable's "Add to Home Screen".
   The latter produces a `data:` page that WebKit refuses to redirect from in a normal
   tab ("Not allowed to use restricted network port"). Shortcuts → Run Script →
