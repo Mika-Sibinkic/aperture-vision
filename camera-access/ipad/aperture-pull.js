@@ -657,6 +657,11 @@ function showRecent(rows){
            '<button class="undo" onclick="undo(\\''+r.donation_id+'\\')">Undo</button></div>';
   }).join('');
 }
+function showRemoved(){
+  document.getElementById('go').disabled=false;
+  document.getElementById('go').textContent='Log Donation';
+  document.getElementById('status').innerHTML='<div class="headline ok">Removed</div><div class="muted">That donation is no longer in the record.</div>';
+}
 function undo(id){ setBusy('Removing…'); send({type:'undo', id:id}); }
 </script></main></body></html>`;
 }
@@ -664,9 +669,9 @@ function undo(id){ setBusy('Removing…'); send({type:'undo', id:id}); }
 async function runApp(cfg) {
   const wv = new WebView();
   await wv.loadHTML(apertureHTML(cfg.location));
-  wv.present(true);
 
-  const call = (js) => wv.evaluateJavaScript(js, false);
+  const call = (js) => wv.evaluateJavaScript(js, false).catch(() => null);
+
   const refresh = async () => {
     try {
       const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
@@ -681,20 +686,16 @@ async function runApp(cfg) {
       await call("showRecent(" + JSON.stringify(rows) + ")");
     } catch (e) { /* the recent list is a convenience; never block on it */ }
   };
-  await refresh();
 
-  // Event pump: park until the page hands over an action.
-  for (;;) {
-    const action = await wv.evaluateJavaScript(
-      "onAsk(function(a){ completion(a) })", true);
-    if (!action) continue;
+  let running = true;
 
+  async function handle(action) {
     if (action.type === "log") {
       try {
         const state = readState();
         if (state.inFlightAt && Date.now() - state.inFlightAt < IN_FLIGHT_WINDOW_MS) {
           await call("showError('Still logging the last donation \\u2014 give it a few seconds.')");
-          continue;
+          return;
         }
         const donationId = UUID.string().toLowerCase();
         writeState({ inFlightAt: Date.now(), inFlightId: donationId });
@@ -705,7 +706,7 @@ async function runApp(cfg) {
         const result = await withRetry("relay", () =>
           withTimeout(postToRelay(cfg, small.toBase64String(), action.item || "", donationId), 90, "Server"));
 
-        const isEmpty = result && (result.item_type === "empty" || result.weight_lbs === 0);
+        const isEmpty = Boolean(result && (result.item_type === "empty" || result.weight_lbs === 0));
         writeState({ inFlightAt: null, inFlightId: null });
         await call("showResult(" + JSON.stringify(Object.assign({}, result, { empty: isEmpty })) + ")");
         await refresh();
@@ -722,7 +723,7 @@ async function runApp(cfg) {
         v.body = JSON.stringify({ donation_id: action.id, reason: "undone on the iPad" });
         const res = await v.loadJSON();
         await call(res && res.ok
-          ? "showResult({weight_lbs:null,item_type:null})"
+          ? "showRemoved()"
           : "showError('Could not remove that entry.')");
         await refresh();
       } catch (e) {
@@ -730,6 +731,29 @@ async function runApp(cfg) {
       }
     }
   }
+
+  // The pump runs CONCURRENTLY with present(). present() must be awaited — it is what
+  // keeps the script alive and the UI on screen; firing it without await let the script
+  // reach the end and Shortcuts reported "Script completed without presenting UI".
+  const pump = (async () => {
+    await refresh();
+    while (running) {
+      let action = null;
+      try {
+        action = await wv.evaluateJavaScript("onAsk(function(a){ completion(a) })", true);
+      } catch (e) {
+        // Page not ready yet, or the view was dismissed. Back off briefly and retry.
+        await new Promise((r) => Timer.schedule(400, false, r));
+        continue;
+      }
+      if (!running) break;
+      if (action) await handle(action);
+    }
+  })();
+
+  await wv.present(true);   // resolves when the volunteer closes the view
+  running = false;
+  try { await pump; } catch (e) { /* pump ends with the view */ }
 }
 
 // Operator menu — only ever shown when opened from inside the Scriptable app.
