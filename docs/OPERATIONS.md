@@ -126,7 +126,25 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 
 ---
 
-## 7. Farmbrite API facts worth not rediscovering
+## 7. iPad facts worth not rediscovering
+
+- **Scriptable has no "Run with Parameter" menu item.** Modes are chosen by the in-app
+  menu (`config.runsInApp`) or the URL scheme `scriptable:///run/Aperture?parameter=…`,
+  which arrives in `args.queryParameters` — NOT `shortcutParameter`.
+- **Home Screen icon: use the Shortcuts app**, not Scriptable's "Add to Home Screen".
+  The latter produces a `data:` page that WebKit refuses to redirect from in a normal
+  tab ("Not allowed to use restricted network port"). Shortcuts → Run Script →
+  **Run in App ON** → Add to Home Screen.
+- **`UITable.addRow(row)` requires a UITableRow.** A zero-arg `addRow()` is valid
+  JavaScript and only fails on-device.
+- **`present()` resolves when the user dismisses the view.** Awaiting it before doing
+  work hangs the script on a blank screen.
+- **`Request.timeoutInterval` is not reliably honoured** — a 20 s interval sat past
+  60 s. Race every network call against a hard `Timer`.
+- Verify any change with `bash scripts/check-ipad-script.sh`; `node --check` alone
+  passes files whose functions have been deleted.
+
+## 8. Farmbrite API facts worth not rediscovering
 
 - Auth: `Authorization: Bearer <token>`. The token lives at
   **Users → <user> → Settings → Allow API Access**.
@@ -141,7 +159,7 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 - List responses can be served from cache (`"cached": true`), so a deleted order may
   still appear in a listing. Confirm deletion with a direct `GET /orders/<id>` (404).
 
-## 8. Command reference
+## 9. Command reference
 
 ```bash
 # health, from anywhere
