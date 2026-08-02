@@ -23,6 +23,13 @@ for f in chooseMode runDonation showHistory selfTest finishAlert progressTable \
 done
 echo "definitions .... ok"
 
+# Scriptable's UITable.addRow requires a UITableRow argument. A zero-arg call is valid
+# JavaScript and only fails on-device with "Expected value of type UITableRow".
+if grep -n "addRow()" "$ABS" >/dev/null; then
+  echo "ZERO-ARG addRow() FOUND — Scriptable requires a UITableRow:"; grep -n "addRow()" "$ABS"; exit 1
+fi
+echo "table rows ..... ok"
+
 node -e '
 const fs=require("fs"),vm=require("vm");
 let src=fs.readFileSync(process.argv[1],"utf8").replace(/if \(typeof module !== "undefined".*?\n\}/s,"");
