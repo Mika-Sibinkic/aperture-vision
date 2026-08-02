@@ -399,6 +399,161 @@ async function finishAlert(steps) {
   await a.present();
 }
 
+// Live progress, shown immediately. The volunteer must SEE that something is
+// happening, or they will tap again during the wait.
+function progressTable() {
+  const t = new UITable();
+  t.showSeparators = true;
+  const render = (lines, headline) => {
+    t.removeAllRows();
+    const h = t.addRow();
+    h.isHeader = true;
+    h.height = 60;
+    h.addText(headline);
+    for (const line of lines) {
+      const r = t.addRow();
+      r.addText(line);
+    }
+    t.reload();
+  };
+  return { table: t, render };
+}
+
+async function runDonation(cfg) {
+  const state = readState();
+  const now = Date.now();
+
+  // Guard: a run is already in flight -> do NOT start a second one.
+  if (state.inFlightAt && now - state.inFlightAt < IN_FLIGHT_WINDOW_MS) {
+    const a = new Alert();
+    a.title = "Already logging";
+    const last = state.lastResult;
+    a.message =
+      "This donation is still being weighed — please wait a few seconds.\n\n" +
+      "Do NOT tap again; tapping twice records the same donation twice." +
+      (last ? `\n\nLast logged: ${last.summary} at ${last.at}` : "");
+    a.addAction("OK");
+    await a.present();
+    return;
+  }
+
+  // Claim the slot before any network work, so a mid-run power-off still
+  // leaves a marker rather than a half-logged donation with no trace.
+  const donationId = UUID.string().toLowerCase();
+  writeState({ inFlightAt: now, inFlightId: donationId });
+
+  const ui = progressTable();
+  ui.render(["Reading the camera…"], "Weighing");
+  ui.table.present(false);
+
+  try {
+    const frame = await withRetry("camera", () => withTimeout(grabFrame(cfg), 25, "Camera"));
+    ui.render(["Photo captured", "Weighing…", "", "This takes about 10–25 seconds."], "Weighing");
+
+    const small = shrink(frame, cfg.maxPixels);
+    const result = await withRetry("relay", () => withTimeout(postToRelay(cfg, small.toBase64String(), "", donationId), 90, "Server"));
+
+    const summary = typeof result.weight_lbs === "number"
+      ? `${result.weight_lbs.toFixed(1)} lbs ${result.item_type || ""}`.trim()
+      : "logged";
+    writeState({
+      inFlightAt: null,
+      inFlightId: null,
+      lastResult: { summary, at: new Date().toLocaleTimeString(), donation_id: donationId },
+    });
+    await showResult(result);
+  } catch (e) {
+    // Release the lock so the next tap can retry immediately — a failed run must
+    // not lock the dock out for the full window.
+    writeState({ inFlightAt: null, inFlightId: null });
+    throw e;
+  }
+}
+
+// Recent log with one-tap undo. Mis-taps happen on a dock — wrong item typed, photo
+// taken before the load was staged, a duplicate. Without this the only fix is asking
+// someone to hand-edit a spreadsheet later, which never happens.
+async function showHistory(cfg) {
+  const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
+  req.timeoutInterval = 60;
+  let rows = [];
+  try {
+    const data = await req.loadJSON();
+    rows = Array.isArray(data.rows) ? data.rows : [];
+  } catch (e) {
+    await showError("Couldn't load the recent log: " + (e.message || e));
+    return;
+  }
+  rows.reverse();                                   // newest first
+  const recent = rows.slice(0, 25);
+
+  const t = new UITable();
+  t.showSeparators = true;
+  const draw = () => {
+    t.removeAllRows();
+    const h = t.addRow();
+    h.isHeader = true;
+    h.height = 60;
+    h.addText("Recent donations", recent.length ? "Tap one to undo it" : "Nothing logged yet");
+    for (const r of recent) {
+      const row = new UITableRow();
+      row.height = 58;
+      const when = String(r.triggered_at || "").replace("T", " ").slice(5, 16);
+      const lbs = typeof r.weight_lbs === "number" ? r.weight_lbs.toFixed(1) + " lbs" : "—";
+      row.addText(`${lbs}  ${r.item_type || ""}`.trim(), `${when}   ${r.description || ""}`.trim());
+      row.onSelect = async () => {
+        const a = new Alert();
+        a.title = "Undo this donation?";
+        a.message = `${lbs} ${r.item_type || ""}\n${when}\n\nIt will be removed from the record and from Farmbrite. The photo is kept.`;
+        a.addDestructiveAction("Undo it");
+        a.addCancelAction("Keep it");
+        if ((await a.present()) !== 0) return;
+
+        const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
+        v.method = "POST";
+        v.timeoutInterval = 60;
+        v.headers = { "Content-Type": "application/json" };
+        v.body = JSON.stringify({ donation_id: r.donation_id, reason: "undone on the iPad" });
+        try {
+          const res = await v.loadJSON();
+          const done = new Alert();
+          done.title = res && res.ok ? "Removed" : "Couldn't remove it";
+          done.message = res && res.ok
+            ? "That donation is no longer in the record."
+            : String((res && res.error) || "Unknown problem.");
+          done.addAction("OK");
+          await done.present();
+          if (res && res.ok) {
+            const i = recent.indexOf(r);
+            if (i >= 0) recent.splice(i, 1);
+            draw();
+          }
+        } catch (e) {
+          await showError("Couldn't remove it: " + (e.message || e));
+        }
+      };
+      t.addRow(row);
+    }
+    t.reload();
+  };
+  draw();
+  await t.present();
+}
+
+// Operator menu — only ever shown when opened from inside the Scriptable app.
+async function chooseMode() {
+  const a = new Alert();
+  a.title = "Aperture";
+  a.message = "What would you like to do?";
+  a.addAction("Log a donation");        // 0
+  a.addAction("System check");          // 1
+  a.addAction("Recent log (undo)");     // 2
+  a.addAction("Re-enter settings");     // 3
+  a.addCancelAction("Close");           // -1
+  const picked = await a.present();
+  return ["", "selftest", "history", "setup"][picked] ?? null;
+}
+
 async function main() {
   let mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "")
     .toString().trim().toLowerCase();
