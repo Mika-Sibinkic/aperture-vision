@@ -303,19 +303,17 @@ async function postToRelay(cfg, b64, description, donationId) {
 }
 
 async function showResult(result) {
-  const t = new UITable();
-  t.showSeparators = true;
-  const head = t.addRow();
-  head.isHeader = true;
-  head.height = 70;
+  // Deliberately an Alert, not a second UITable: the progress table is already on
+  // screen and presenting another over it is unreliable.
   const hasWeight = result && typeof result.weight_lbs === "number";
-  head.addText(hasWeight ? result.weight_lbs.toFixed(1) + " lbs" : "Logged");
-  const add = (k, v) => { const r = t.addRow(); r.addText(String(k)); r.addText(v == null ? "—" : String(v)); };
-  // Client-facing screen: the weight IS the record. No model scores, no internal
-  // diagnostics — those stay in the operator's export, not in front of volunteers.
-  add("Item", result.item_type);
-  add("Recorded", new Date().toLocaleTimeString());
-  await t.present();
+  const a = new Alert();
+  a.title = hasWeight ? result.weight_lbs.toFixed(1) + " lbs" : "Logged";
+  const lines = [];
+  if (result.item_type) lines.push("Item: " + result.item_type);
+  lines.push("Recorded " + new Date().toLocaleTimeString());
+  a.message = lines.join("\n");
+  a.addAction("Done");
+  await a.present();
 }
 
 async function showError(message) {
@@ -336,7 +334,9 @@ async function selfTest(cfg) {
     for (const s of steps) { const r = t.addRow(); r.addText(s.ok ? "✅ " + s.name : "❌ " + s.name); r.addText(s.detail || ""); }
     t.reload();
   };
-  await t.present(false);
+  // NOT awaited: present() resolves only when the user dismisses the table, so
+  // awaiting it here meant the checks never started and the screen sat blank.
+  t.present(false);
 
   let frame = null;
   try {
@@ -366,6 +366,13 @@ async function selfTest(cfg) {
   const allOk = steps.every((s) => s.ok);
   steps.push({ ok: allOk, name: allOk ? "ALL GOOD — ready for volunteers" : "NOT READY — see the ❌ above", detail: "" });
   render();
+
+  // An Alert is guaranteed to surface even if the table was dismissed early.
+  const summary = new Alert();
+  summary.title = allOk ? "All good" : "Not ready";
+  summary.message = steps.map((x) => (x.ok ? "✅ " : "❌ ") + x.name + (x.detail ? "  —  " + x.detail : "")).join("\n");
+  summary.addAction("OK");
+  await summary.present();
   return steps;
 }
 
