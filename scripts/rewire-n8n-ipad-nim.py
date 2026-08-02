@@ -219,12 +219,21 @@ def farmbrite_build_code() -> str:
         "  return [{ json: { __skip: true, reason: 'no positive weight to log' } }];\n"
         "}\n\n"
         "const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n"
-        "const wanted = norm(parsed.item_type);\n"
+        "// What the volunteer TYPED wins over what the model guessed. Their existing\n"
+        "// logs name specific products ('Kale'), and a person who typed the item is\n"
+        "// better evidence than a generic classification like 'produce'.\n"
+        "const candidates = [parsed.description, parsed.item_type]\n"
+        "  .map(norm).filter((v) => v && v.length > 2);\n"
         "let productId = null, productName = null;\n"
-        "if (wanted) {\n"
+        "for (const wanted of candidates) {\n"
         "  for (const [name, id] of Object.entries(PRODUCTS)) {\n"
         "    if (norm(name) === wanted) { productId = id; productName = name; break; }\n"
         "  }\n"
+        "  if (productId) break;\n"
+        "}\n"
+        "for (const wanted of candidates) {\n"
+        "  if (productId) break;\n"
+        "  {\n"
         "  if (!productId) {                       // contains-match, longest name wins\n"
         "    // Seasonal buckets are EXCLUDED here: a generic item_type like 'produce'\n"
         "    // substring-matches every 'Seasonal Produce - <Month>' entry and would pick\n"
@@ -238,6 +247,7 @@ def farmbrite_build_code() -> str:
         "        best = n.length; productId = id; productName = name;\n"
         "      }\n"
         "    }\n"
+        "  }\n"
         "  }\n"
         "}\n"
         "// Fall back to the month bucket Cul2vate already uses for mixed loads.\n"
@@ -257,7 +267,8 @@ def farmbrite_build_code() -> str:
         "    order_date: today,\n"
         "    // Client-facing text. Operational only: no model names, no confidence\n"
         "    // scores, nothing that reads as machine-generated commentary.\n"
-        "    note: 'Dock intake - ' + (parsed.item_type || 'produce') + ' - ref ' +\n"
+        "    // Name the resolved PRODUCT, so the note matches the line item a person sees.\n"
+        "    note: 'Dock intake - ' + productName + ' - ref ' +\n"
         "          String(parsed.donation_id || '').slice(0, 8),\n"
         "    order_items: [{\n"
         "      product_id: productId,\n"
@@ -546,6 +557,7 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
         if isinstance(cols, dict):
             cols.setdefault("image_url", "={{ $json.image_url }}")
             cols.setdefault("image_sha256", "={{ $json.image_sha256 }}")
+            cols.pop("confidence", None)   # meaningless to the people reading the sheet
             cols.setdefault("container_count", "={{ $json.container_count }}")
             cols.setdefault("container_fill_fraction", "={{ $json.container_fill_fraction }}")
 

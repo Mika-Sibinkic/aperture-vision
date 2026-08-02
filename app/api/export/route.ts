@@ -29,7 +29,6 @@ const LEAD = [
   "container_type",
   "container_count",
   "container_fill_fraction",
-  "confidence",
   "description",
   "location",
 ];
@@ -105,8 +104,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Columns that mean nothing to the people reading this export. Kept in the raw
+    // stored record for diagnostics, never surfaced here.
+    const HIDDEN = new Set(["confidence", "implausible_weight", "farmbrite_pending"]);
     const extra = [...new Set(rows.flatMap((r) => Object.keys(r)))]
-      .filter((k) => !LEAD.includes(k))
+      .filter((k) => !LEAD.includes(k) && !HIDDEN.has(k))
       .sort();
     const headers = [...LEAD, ...extra];
 
