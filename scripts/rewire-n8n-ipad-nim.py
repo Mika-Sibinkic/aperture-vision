@@ -43,7 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 WORKFLOW_ID = "<n8n-workflow-id>"
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 NIM_MODEL = "nvidia/nemotron-nano-12b-v2-vl"
-PROMPT_VERSION = "v0.5-count"
+PROMPT_VERSION = "v0.6-net"
 NIM_CREDENTIAL_NAME = "NVIDIA NIM (Aperture)"
 
 # n8n rejects a PUT whose `settings` carries keys outside this allow-list.
@@ -62,6 +62,11 @@ PARSE_NODE = "Parse vision + tare + bias"
 WEBHOOK_NODE = "Webhook: donation button"
 SHEET_NODE = "Append to Google Sheet"
 SHAPE_NODE = "Shape response"
+FARMBRITE_SKIP_NODE = "Farmbrite skipped (pending key)"
+FARMBRITE_BUILD_NODE = "Build Farmbrite order"
+FARMBRITE_NODE = "Farmbrite: log order"
+FARMBRITE_URL = "https://api.farmbrite.com/v1/orders"
+FARMBRITE_CREDENTIAL_NAME = "Farmbrite (Aperture)"
 
 
 # --------------------------------------------------------------------------- api
@@ -90,6 +95,8 @@ def load_system_prompt() -> str:
     if not match:
         sys.exit("ERROR: could not find the '## SYSTEM PROMPT' block in prompts/weight-estimation.md")
     prompt = match.group(1).strip()
+    if "nothing\nis added or subtracted after you" not in prompt.replace("  ", " "):
+        pass  # wording check is advisory; the hard contract check is below
     if "container_count" not in prompt:
         sys.exit("ERROR: prompt lacks container_count — v0.5 counting contract missing. Aborting.")
     if "48.4" in prompt or '"confidence": 0.82' in prompt:
@@ -110,6 +117,153 @@ def find_credential_id() -> str:
         "  Create it once:  POST /credentials {name:'NVIDIA NIM (Aperture)', type:'httpHeaderAuth',\n"
         "                     data:{name:'Authorization', value:'Bearer <nvapi-key>'}}\n"
         f"  then save the returned id to {cache} (gitignored) or export N8N_NIM_CREDENTIAL_ID."
+    )
+
+
+PRODUCT_MAP = {
+"Acorn Squash": "68016e831e1f000008110583",
+"Adirondack Blue Potatoes": "685c02f56544a6000f3f751b",
+"Banana Peppers": "67c4b3c4d17b1e0008676a9c",
+"Beans": "68017a88598e8e000ce50ce2",
+"Beets": "67c4b7c6d17b1e0012676cd8",
+"Bell Peppers": "67d84f1d3e1b52000b5639e2",
+"Blackberries": "67bf7b40a7ec08000cdd7bc2",
+"Blackberry, Prime Ark Freedom": "67bf7ecb56ff1d000829401a",
+"Blueberries": "67c0dbb356ff1d000829502c",
+"Bok Choy": "68813f486609ae000df70d38",
+"Broccoli": "67c4b3f5d17b1e0012676b5a",
+"Brussels": "68017d86598e8e0013e50a21",
+"Burbank Russet Potatoes": "6877d6c1012e4f0008cab97b",
+"Butternut Squash": "68891e79f87924001c278829",
+"Cabbage": "67c4b379d17b1e0012676b58",
+"Cantaloupe": "68017a4c598e8e0013e50a17",
+"Carrots": "67c4e06ed17b1e000b676981",
+"Cauliflower": "67c4b8b98038e30008c0ac26",
+"Cherry Tomatoes": "6863e8ed4c2c080008f6176e",
+"Chives": "67c4dfe6d17b1e0012676e12",
+"Collards": "67c4b9dad17b1e000b676939",
+"Community Garden Produce": "683615bc9685a100081209f1",
+"Corn": "687fa362ca68a4000d38f9de",
+"Eggplant": "68b75365dc56b597cf02dce6",
+"Fingerling Potatoes": "6863e2284c2c08000df61298",
+"Garlic Scapes": "682cba030d549f000ea5d3f6",
+"Gold Rush Beans (2025)": "684c7c71dcf0040008ae0929",
+"Grandprize Summer Squash": "684c3ce4dcf004000cae0cce",
+"Green Beans": "685c04fae5911400106a925c",
+"Greenhouse Cucumbers": "67ab66961e9dad00080b99fc",
+"Greenhouse Tomato": "67a67a873a7575000815cecf",
+"Hardneck Garlic": "6849b25c6bf41d000cc864ae",
+"Heirloom & Field Tomatoes": "67c4b76f8038e30008c0abe6",
+"Hot Peppers": "68017ee11e1f00000f1102d3",
+"Kabocha Squash": "687135fd379c850021355504",
+"Kale": "67c4b801d17b1e0012676cde",
+"Kennebec Potatoes": "6877cc98012e4f000bcab1ff",
+"Kohlrabi": "67c4e0d1d17b1e000b676984",
+"Lehigh Potatoes": "6880f270ca68a4000d39034d",
+"Lettuce": "67c4b9788038e30014c0ad4c",
+"Ministry Baked Goods": "69026e2a77b57bbe30bbcf1a",
+"Ministry Beef": "67a578fa3a7575000f15c956",
+"Ministry Chicken": "67fd2ec04c2c08000a4e0f40",
+"Ministry Eggs": "67fd30805ba4920008c5f8ad",
+"Ministry Pork": "67b4a6d2ca68a4000821a803",
+"Ministry Venison": "67a57ea53a7575000815c98e",
+"Mistake": "68824c6f4f2d350017101374",
+"Okra": "67c4e22bd17b1e0008676ad5",
+"Peanuts": "68017ea8598e8e000ce50d5c",
+"Pontiac Red Potatoes": "684b1ab190a6dd000b0ab457",
+"Pumpkins": "68017c651e1f00000811072b",
+"Radishes": "67c4e09f8038e30014c0ae01",
+"Raspberries": "67bf805756ff1d000829401e",
+"Red Onions": "67c4b6e88038e30008c0abd4",
+"Seasonal Produce - August": "689f60fd11aa992057c25043",
+"Seasonal Produce - July": "68c97699cc6e441327310afe",
+"Seasonal Produce - June": "6849ee4f0c3c6a000bb89339",
+"Seasonal Produce - October": "68f7b687fc9226a147c00652",
+"Seasonal Produce - September": "68c976c779e3c0c2a7c3e8b7",
+"Serrano Peppers": "67c4ba8ad17b1e000b67693d",
+"Snap Pea": "684c7ebbdcf004000cae11ad",
+"Softneck Garlic": "6849b2326bf41d000cc864ad",
+"Spaghetti Squash": "6893a5071c7e1636e0b6c7b7",
+"Spinach": "681b8ba42a8dec000bfcf7c1",
+"Strawberries": "681b714d3501e90008dbb96a",
+"Sweet Potatoes": "67e6caf1453ea0000f9e5aae",
+"Swiss Chard": "67c4b8438038e30008c0ac22",
+"Tomatillos": "68640685779b650012fdc433",
+"Turnips and Greens": "67a67b883a7575000f15cd5c",
+"Watermelons": "68016f1e1e1f00000f11024d",
+"White Onions": "67c4b633d17b1e0012676c50",
+"Yellow Summer Squash": "684c7a3b90a6dd000b0aca9c",
+"Yukon Gold Potatoes": "67c4e13dd17b1e000b676987",
+"Zucchini": "68016dd21e1f000008110580"
+}
+
+
+def farmbrite_build_code() -> str:
+    """Map the parsed donation onto a Farmbrite draft order line.
+
+    Field quirks learned from the live API (2026-08-02):
+      * `qty` and `price` MUST be STRINGS. Numbers return
+        500 "Invalid Order Item. Qty and price required for new order items."
+      * An order with no items is accepted silently, so an unmatched product must
+        never fall through to an empty order — that would look logged but hold nothing.
+    """
+    return (
+        "// Resolve the donation to a Farmbrite product and build a Draft order.\n"
+        f"const PRODUCTS = {json.dumps(PRODUCT_MAP)};\n"
+        "const MONTHS = ['January','February','March','April','May','June','July',\n"
+        "  'August','September','October','November','December'];\n\n"
+        "const parsed = $('Parse vision + tare + bias').first().json;\n"
+        "const weight = parsed.weight_lbs;\n\n"
+        "// Nothing to log for an empty zone or an unusable reading.\n"
+        "if (typeof weight !== 'number' || !(weight > 0)) {\n"
+        "  return [{ json: { __skip: true, reason: 'no positive weight to log' } }];\n"
+        "}\n\n"
+        "const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n"
+        "const wanted = norm(parsed.item_type);\n"
+        "let productId = null, productName = null;\n"
+        "if (wanted) {\n"
+        "  for (const [name, id] of Object.entries(PRODUCTS)) {\n"
+        "    if (norm(name) === wanted) { productId = id; productName = name; break; }\n"
+        "  }\n"
+        "  if (!productId) {                       // contains-match, longest name wins\n"
+        "    // Seasonal buckets are EXCLUDED here: a generic item_type like 'produce'\n"
+        "    // substring-matches every 'Seasonal Produce - <Month>' entry and would pick\n"
+        "    // an arbitrary (wrong) month. They are only ever used as the explicit\n"
+        "    // current-month fallback below. [fixed 2026-08-02]\n"
+        "    let best = 0;\n"
+        "    for (const [name, id] of Object.entries(PRODUCTS)) {\n"
+        "      if (name.startsWith('Seasonal Produce')) continue;\n"
+        "      const n = norm(name);\n"
+        "      if (n && (n.includes(wanted) || wanted.includes(n)) && n.length > best) {\n"
+        "        best = n.length; productId = id; productName = name;\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "}\n"
+        "// Fall back to the month bucket Cul2vate already uses for mixed loads.\n"
+        "if (!productId) {\n"
+        "  const bucket = 'Seasonal Produce - ' + MONTHS[new Date().getMonth()];\n"
+        "  if (PRODUCTS[bucket]) { productId = PRODUCTS[bucket]; productName = bucket; }\n"
+        "}\n"
+        "if (!productId) {\n"
+        "  return [{ json: { __skip: true, reason: 'no product match and no month bucket' } }];\n"
+        "}\n\n"
+        "const today = new Date().toISOString().slice(0, 10);\n"
+        "return [{ json: {\n"
+        "  __skip: false,\n"
+        "  product_name: productName,\n"
+        "  order_body: {\n"
+        "    status: 'Draft',\n"
+        "    order_date: today,\n"
+        "    note: 'Aperture auto-log - ' + (parsed.item_type || 'produce') + ' - donation ' +\n"
+        "          (parsed.donation_id || '') + ' - confidence ' + (parsed.confidence ?? 'n/a'),\n"
+        "    order_items: [{\n"
+        "      product_id: productId,\n"
+        "      qty: String(Math.round(weight * 100) / 100),   // MUST be a string\n"
+        "      price: '0.00'                                   // MUST be a string\n"
+        "    }]\n"
+        "  }\n"
+        "}}];"
     )
 
 
@@ -235,6 +389,30 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     # Tare scales with the NUMBER of containers. Subtracting a single tare from a
     # 6-crate load under-reported the container weight by 5 tares. [fixed 2026-07-29]
     code = parse["parameters"]["jsCode"]
+
+    # TARE REMOVED (2026-08-02). The model reports FOOD-ONLY weight, so subtracting a
+    # container tare downstream double-counted it. Removing the subtraction also
+    # removes resolveContainer's fuzzy keyword matching from the weight path — that
+    # lookup could resolve the same photo to different containers on different runs,
+    # which is exactly the kind of nondeterminism we do not want in a logged number.
+    # container_type / container_count are still recorded, they just no longer alter it.
+    if "TARE_REMOVED" not in code:
+        code = code.replace(
+            "  ? Math.max(0, rawWeight - totalTare)",
+            "  ? Math.max(0, rawWeight)   // TARE_REMOVED: model already reports food-only weight")
+        code = code.replace(
+            "  ? Math.max(0, rawWeight - container.tare_lbs)",
+            "  ? Math.max(0, rawWeight)   // TARE_REMOVED: model already reports food-only weight")
+        code = code.replace(
+            "const totalTare = container.tare_lbs * containerCount;",
+            "const totalTare = 0;   // TARE_REMOVED 2026-08-02")
+        code = code.replace(
+            "  tare_lbs: totalTare,",
+            "  tare_lbs: 0,\n  tare_applied: false,")
+        code = code.replace("  tare_lbs_each: container.tare_lbs,\n", "")
+        # Write back immediately — this must not depend on any later branch running.
+        parse["parameters"]["jsCode"] = code
+
     if "containerCount" not in code:
         code = code.replace(
             "const container = resolveContainer(vision);",
@@ -248,8 +426,8 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
             "  ? Math.max(0, rawWeight - totalTare)")
         code = code.replace(
             "  tare_lbs: container.tare_lbs,",
-            "  tare_lbs: totalTare,\n"
-            "  tare_lbs_each: container.tare_lbs,\n"
+            "  tare_lbs: 0,                 // TARE_REMOVED — kept as a column for history\n"
+            "  tare_applied: false,\n"
             "  container_count: containerCount,\n"
             "  container_fill_fraction: vision.container_fill_fraction ?? null,")
         parse["parameters"]["jsCode"] = code
@@ -303,6 +481,61 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
             "  prompt_version: parsed.prompt_version ?? null,\n"
             "  model: parsed.model ?? null,",
             1)
+
+    # Farmbrite: replace the "skipped (pending key)" stub with a real draft-order write.
+    skip = nodes.get(FARMBRITE_SKIP_NODE)
+    fb_cred = (REPO / ".n8n-farmbrite-credential-id")
+    if skip is not None and fb_cred.exists():
+        pos = skip.get("position", [0, 0])
+        builder = {
+            "id": str(uuid.uuid4()), "name": FARMBRITE_BUILD_NODE,
+            "type": "n8n-nodes-base.code", "typeVersion": 2,
+            "position": [pos[0], pos[1] + 160],
+            "parameters": {"jsCode": farmbrite_build_code()},
+        }
+        writer = {
+            "id": str(uuid.uuid4()), "name": FARMBRITE_NODE,
+            "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+            "position": [pos[0] + 200, pos[1] + 160],
+            "parameters": {
+                "method": "POST", "url": FARMBRITE_URL,
+                "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+                "sendBody": True, "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json.order_body) }}",
+                "options": {"timeout": 20000},
+            },
+            "credentials": {"httpHeaderAuth": {"id": fb_cred.read_text().strip(),
+                                               "name": FARMBRITE_CREDENTIAL_NAME}},
+            # Farmbrite being down must never fail the volunteer's tap — the Sheet row
+            # and the photo are already safe by this point.
+            "onError": "continueRegularOutput",
+            "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 1000,
+            "alwaysOutputData": True,
+        }
+        # Idempotent: refresh the parameters of nodes that already exist rather than
+        # only creating them once. Otherwise a fix to the builder code silently never
+        # reaches the live workflow on a re-run. [fixed 2026-08-02]
+        by_name = {n["name"]: n for n in wf["nodes"]}
+        for node in (builder, writer):
+            current = by_name.get(node["name"])
+            if current is None:
+                wf["nodes"].append(node)
+            else:
+                current["parameters"] = node["parameters"]
+                current["type"] = node["type"]
+                current["typeVersion"] = node["typeVersion"]
+                if "credentials" in node:
+                    current["credentials"] = node["credentials"]
+                for k in ("onError", "retryOnFail", "maxTries", "waitBetweenTries", "alwaysOutputData"):
+                    if k in node:
+                        current[k] = node[k]
+        conns = wf.setdefault("connections", {})
+        conns[FARMBRITE_SKIP_NODE] = {"main": [[
+            {"node": FARMBRITE_BUILD_NODE, "type": "main", "index": 0},
+            {"node": SHAPE_NODE, "type": "main", "index": 0},
+        ]]}
+        conns[FARMBRITE_BUILD_NODE] = {"main": [[{"node": FARMBRITE_NODE, "type": "main", "index": 0}]]}
+        conns.setdefault(FARMBRITE_NODE, {"main": [[]]})
 
     # 2) Sheet: log the photo pointer alongside the prediction.
     sheet = nodes.get(SHEET_NODE)
