@@ -344,10 +344,12 @@ async function selfTest(cfg) {
   const t = new UITable();
   const render = () => {
     t.removeAllRows();
-    const h = t.addRow(); h.isHeader = true; h.height = 56; h.addText("Aperture system check", note);
+    const h = new UITableRow(); h.isHeader = true; h.height = 56;
+    h.addText("Aperture system check", note); t.addRow(h);
     for (const s of steps) {
-      const r = t.addRow();
+      const r = new UITableRow();
       r.addText((s.ok ? "\u2705 " : "\u274c ") + s.name, s.detail || "");
+      t.addRow(r);
     }
     t.reload();
   };
@@ -406,13 +408,15 @@ function progressTable() {
   t.showSeparators = true;
   const render = (lines, headline) => {
     t.removeAllRows();
-    const h = t.addRow();
+    const h = new UITableRow();
     h.isHeader = true;
     h.height = 60;
     h.addText(headline);
+    t.addRow(h);
     for (const line of lines) {
-      const r = t.addRow();
+      const r = new UITableRow();
       r.addText(line);
+      t.addRow(r);
     }
     t.reload();
   };
@@ -491,10 +495,11 @@ async function showHistory(cfg) {
   t.showSeparators = true;
   const draw = () => {
     t.removeAllRows();
-    const h = t.addRow();
+    const h = new UITableRow();
     h.isHeader = true;
     h.height = 60;
     h.addText("Recent donations", recent.length ? "Tap one to undo it" : "Nothing logged yet");
+    t.addRow(h);
     for (const r of recent) {
       const row = new UITableRow();
       row.height = 58;
@@ -555,8 +560,15 @@ async function chooseMode() {
 }
 
 async function main() {
-  let mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "")
-    .toString().trim().toLowerCase();
+  // A mode can arrive three ways: a Shortcut parameter, share-sheet text, or the URL
+  // scheme (scriptable:///run/Aperture?parameter=selftest), which lands in
+  // queryParameters and was previously ignored — so the URL silently logged a donation.
+  const a = typeof args !== "undefined" ? args : {};
+  let mode = String(
+    (a.shortcutParameter || "") ||
+    (a.queryParameters && (a.queryParameters.parameter || a.queryParameters.mode)) ||
+    (a.plainTexts && a.plainTexts[0]) || ""
+  ).trim().toLowerCase();
 
   // No parameter and opened inside the app -> operator menu. From the home-screen
   // icon (runsInApp === false) fall straight through to logging.
