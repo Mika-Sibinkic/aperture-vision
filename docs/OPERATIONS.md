@@ -126,7 +126,22 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 
 ---
 
-## 7. Command reference
+## 7. Farmbrite API facts worth not rediscovering
+
+- Auth: `Authorization: Bearer <token>`. The token lives at
+  **Users → <user> → Settings → Allow API Access**.
+- `qty` and `price` on an order item **must be strings**. Numbers return
+  `500 "Invalid Order Item"`.
+- An order with **no items is accepted silently** — an unmatched product must never
+  fall through to an empty order.
+- **`GET /orders` excludes drafts.** A just-created draft was absent from all 5 pages
+  while being retrievable by id. Use **`?status=Draft`** to list them. This is why the
+  Farmbrite write is chained ahead of the response: the order id cannot be looked up
+  afterwards, so it must be carried forward.
+- List responses can be served from cache (`"cached": true`), so a deleted order may
+  still appear in a listing. Confirm deletion with a direct `GET /orders/<id>` (404).
+
+## 8. Command reference
 
 ```bash
 # health, from anywhere
