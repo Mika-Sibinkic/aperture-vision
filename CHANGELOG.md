@@ -3,6 +3,10 @@
 > State: stable · Optionality: low · Open to Change: append-only. Format: [Keep a Changelog](https://keepachangelog.com). Entries before 2026-06-10 reconstructed during Git migration from checkpoint logs, file timestamps, Pocket recordings, and Notion records.
 
 ## [Unreleased]
+- **First live capture from the mounted camera (2026-08-02) — chain proven.** iPad system check passed on the dock: camera → relay → vision → Sheet → Farmbrite. The last unverified hop in the system is verified on real hardware.
+- **Prompt v0.7-zone — fixes a confident false positive on the real camera.** The first live frame returned "banana box, 50 lbs" on an EMPTY staging zone (night infrared, cluttered dock around the tape). Now: only goods inside the tape count, defaulting to a common container is forbidden, monochrome/IR is expected, and "unidentified" is an allowed answer. Verified: real frame → empty/0 lb, positive control still returns goods.
+- **Negative control replaced with a real camera frame** (`demo/test-images/dock-empty-night-IR.jpg`) — the exact frame that failed.
+- Fixed: the regression suite was pinned to a model production does not use; it now reads the production model.
 - **Farmbrite live (2026-08-02):** each tap writes a Draft order (`product_id` + `qty` in pounds). Verified against the real account and cleaned up — order count back to 489. Non-blocking: Farmbrite down cannot fail a tap.
 - **Tare removed (prompt v0.6-net):** v0.5 double-subtracted containers. The model's food-only weight is now the logged number; the fuzzy container lookup is out of the weight path. 60/60/60 lb across three runs of the same image.
 - **Pre-handoff audit** (`docs/AUDIT-PREHANDOFF.md`): one on-site blocker (camera IP is DHCP — needs a reservation), plus no-alerting / NIM-credit / personal-token / unvalidated-accuracy risks tracked with owners and fixes.

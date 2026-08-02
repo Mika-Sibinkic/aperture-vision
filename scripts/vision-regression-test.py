@@ -3,9 +3,11 @@
 Vision regression test — guards the two failures that silently produce
 confident, wrong weights.
 
-  NEGATIVE control  demo/test-images/IMG_0739.JPG — a real dock frame with an
-                    EMPTY staging zone. Ground truth 0.0 lb. Must come back
-                    empty/0. Catches a model that invents a donation.
+  NEGATIVE control  demo/test-images/dock-empty-night-IR.jpg — an ACTUAL frame from
+                    the mounted camera (2026-08-01 21:59, night infrared): empty
+                    staging zone, cluttered dock around it, monochrome. Ground truth
+                    0.0 lb. This is the exact frame on which v0.6 reported
+                    "banana box, 50 lbs" — the real failure this suite exists to catch.
 
   POSITIVE control  a real fruit/veg market photo (fetched from Wikimedia
                     Commons). Must come back with goods and a computed weight.
@@ -37,8 +39,17 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 RELAY_URL = "https://<vercel-app-host>/api/donate"
-MODEL = "meta/llama-3.2-90b-vision-instruct"
-NEGATIVE = REPO / "demo" / "test-images" / "IMG_0739.JPG"
+def production_model() -> str:
+    """Read the model production actually uses, so this suite can never silently test
+    a different one (it was pinned to llama-3.2-90b while production ran nemotron)."""
+    src = (REPO / "scripts" / "rewire-n8n-ipad-nim.py").read_text()
+    m = re.search(r'^NIM_MODEL\s*=\s*"([^"]+)"', src, re.M)
+    return m.group(1) if m else "nvidia/nemotron-nano-12b-v2-vl"
+
+
+MODEL = production_model()
+NEGATIVE = REPO / "demo" / "test-images" / "dock-empty-night-IR.jpg"   # REAL frame from the mounted camera, empty zone, night IR
+NEGATIVE_OLD = REPO / "demo" / "test-images" / "IMG_0739.JPG"
 POSITIVE_TITLE = "File:Obstmarktstand Marburg Firmanei1.jpg"
 UA = {"User-Agent": "aperture-vision-regression/1.0 (owner@example.com)"}
 PARROT_VALUES = {"weight_lbs": 48.4, "confidence": 0.82, "pixels_per_inch": 2.3,
