@@ -42,8 +42,8 @@ import uuid
 REPO = Path(__file__).resolve().parent.parent
 WORKFLOW_ID = "<n8n-workflow-id>"
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-NIM_MODEL = "meta/llama-3.2-90b-vision-instruct"
-PROMPT_VERSION = "v0.4-nim"
+NIM_MODEL = "nvidia/nemotron-nano-12b-v2-vl"
+PROMPT_VERSION = "v0.5-count"
 NIM_CREDENTIAL_NAME = "NVIDIA NIM (Aperture)"
 
 # n8n rejects a PUT whose `settings` carries keys outside this allow-list.
@@ -61,6 +61,7 @@ CONFIG_NODE = "Load prompt + config"
 PARSE_NODE = "Parse vision + tare + bias"
 WEBHOOK_NODE = "Webhook: donation button"
 SHEET_NODE = "Append to Google Sheet"
+SHAPE_NODE = "Shape response"
 
 
 # --------------------------------------------------------------------------- api
@@ -89,6 +90,8 @@ def load_system_prompt() -> str:
     if not match:
         sys.exit("ERROR: could not find the '## SYSTEM PROMPT' block in prompts/weight-estimation.md")
     prompt = match.group(1).strip()
+    if "container_count" not in prompt:
+        sys.exit("ERROR: prompt lacks container_count — v0.5 counting contract missing. Aborting.")
     if "48.4" in prompt or '"confidence": 0.82' in prompt:
         sys.exit("ERROR: prompt contains filled-in example values — that is the v0.3 parroting bug. Aborting.")
     return prompt
@@ -229,6 +232,28 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     parse["parameters"]["jsCode"] = patch_parse_code(parse["parameters"]["jsCode"])
     # Carry the archived-photo fields through so every logged prediction points at
     # the exact image it was made from. This is what makes a row trainable later.
+    # Tare scales with the NUMBER of containers. Subtracting a single tare from a
+    # 6-crate load under-reported the container weight by 5 tares. [fixed 2026-07-29]
+    code = parse["parameters"]["jsCode"]
+    if "containerCount" not in code:
+        code = code.replace(
+            "const container = resolveContainer(vision);",
+            "const container = resolveContainer(vision);\n"
+            "// How many containers of this item are in the zone (v0.5 counting contract).\n"
+            "const containerCount = Number.isFinite(vision.container_count) && vision.container_count > 0\n"
+            "  ? Math.round(vision.container_count) : 1;\n"
+            "const totalTare = container.tare_lbs * containerCount;")
+        code = code.replace(
+            "  ? Math.max(0, rawWeight - container.tare_lbs)",
+            "  ? Math.max(0, rawWeight - totalTare)")
+        code = code.replace(
+            "  tare_lbs: container.tare_lbs,",
+            "  tare_lbs: totalTare,\n"
+            "  tare_lbs_each: container.tare_lbs,\n"
+            "  container_count: containerCount,\n"
+            "  container_fill_fraction: vision.container_fill_fraction ?? null,")
+        parse["parameters"]["jsCode"] = code
+
     if "image_url:" not in parse["parameters"]["jsCode"]:
         parse["parameters"]["jsCode"] = parse["parameters"]["jsCode"].replace(
             "  prompt_version: config.prompt_version,",
@@ -238,6 +263,47 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
             "  archive_error: trigger.archive_error ?? null,\n"
             "  prompt_version: config.prompt_version,")
 
+    # Physical sanity bound. The 6ft x 6ft zone cannot plausibly hold more than a
+    # couple thousand pounds; an estimate above the bound almost always means the
+    # model over-counted containers. Flag it and drop confidence rather than logging
+    # a confident absurdity. The raw number is still recorded for review.
+    parse_code = parse["parameters"]["jsCode"]
+    if "IMPLAUSIBLE_LBS" not in parse_code:
+        parse_code = parse_code.replace(
+            "return [{ json: {",
+            "const IMPLAUSIBLE_LBS = 2000;\n"
+            "const implausible = typeof adjustedWeight === 'number' && adjustedWeight > IMPLAUSIBLE_LBS;\n"
+            "const vFlags = Array.isArray(vision.known_failure_flags) ? vision.known_failure_flags.slice() : [];\n"
+            "if (implausible) vFlags.push('implausible_weight_review');\n\n"
+            "return [{ json: {",
+            1)
+        parse_code = parse_code.replace(
+            "  bias_multiplier: multiplier,",
+            "  known_failure_flags: vFlags,\n"
+            "  implausible_weight: implausible,\n"
+            "  confidence: implausible ? Math.min(vision.confidence ?? 0.5, 0.3) : (vision.confidence ?? null),\n"
+            "  bias_multiplier: multiplier,",
+            1)
+        parse["parameters"]["jsCode"] = parse_code
+
+    # Shape response is ALL the relay (and therefore the CSV and the iPad) ever sees,
+    # so anything worth logging or showing must be listed here explicitly.
+    shape = nodes.get(SHAPE_NODE)
+    if shape and "container_count" not in shape["parameters"]["jsCode"]:
+        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
+            "  charuco_detected: parsed.charuco_detected ?? false,",
+            "  charuco_detected: parsed.charuco_detected ?? false,\n"
+            "  container_type: parsed.container_type ?? null,\n"
+            "  container_count: parsed.container_count ?? null,\n"
+            "  container_fill_fraction: parsed.container_fill_fraction ?? null,\n"
+            "  tare_lbs: parsed.tare_lbs ?? null,\n"
+            "  weight_lbs_low: parsed.weight_lbs_low ?? null,\n"
+            "  weight_lbs_high: parsed.weight_lbs_high ?? null,\n"
+            "  implausible_weight: parsed.implausible_weight ?? false,\n"
+            "  prompt_version: parsed.prompt_version ?? null,\n"
+            "  model: parsed.model ?? null,",
+            1)
+
     # 2) Sheet: log the photo pointer alongside the prediction.
     sheet = nodes.get(SHEET_NODE)
     if sheet:
@@ -245,6 +311,8 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
         if isinstance(cols, dict):
             cols.setdefault("image_url", "={{ $json.image_url }}")
             cols.setdefault("image_sha256", "={{ $json.image_sha256 }}")
+            cols.setdefault("container_count", "={{ $json.container_count }}")
+            cols.setdefault("container_fill_fraction", "={{ $json.container_fill_fraction }}")
 
     # 5. drop the dead bridge fetch and rewire config -> build
     wf["nodes"] = [n for n in wf["nodes"] if n["name"] != OLD_FETCH_NODE]
