@@ -43,7 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 WORKFLOW_ID = "<n8n-workflow-id>"
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 NIM_MODEL = "nvidia/nemotron-nano-12b-v2-vl"
-PROMPT_VERSION = "v0.7-zone"
+PROMPT_VERSION = "v0.8-scene"
 NIM_CREDENTIAL_NAME = "NVIDIA NIM (Aperture)"
 
 # n8n rejects a PUT whose `settings` carries keys outside this allow-list.

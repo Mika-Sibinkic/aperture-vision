@@ -98,8 +98,8 @@ def fetch_positive() -> Path | None:
         return None
 
 
-def ask_nim(image: bytes, key: str) -> dict:
-    context = ("\n\nContext for THIS donation:\ndescription: —\nlocation: Cul2vate, Ellington Ag Center\n"
+def ask_nim(image: bytes, key: str, desc: str = "—") -> dict:
+    context = (f"\n\nContext for THIS donation:\ndescription: {desc}\nlocation: Cul2vate, Ellington Ag Center\n"
                "triggered_at: 2026-01-01T00:00:00Z\neval_mode: false\n\nReturn the JSON object now.")
     body = {
         "model": MODEL,
@@ -116,7 +116,9 @@ def ask_nim(image: bytes, key: str) -> dict:
 
 
 def ask_relay(image: bytes, label: str) -> dict:
-    body = json.dumps({"description": f"REGRESSION TEST — {label}", "image_b64": base64.b64encode(image).decode(),
+    # "phantom" cases must send a real item name, since that is the thing under test.
+    desc = "Kale" if "phantom" in label else f"REGRESSION TEST — {label}"
+    body = json.dumps({"description": desc, "image_b64": base64.b64encode(image).decode(),
                        "triggered_at": "2026-01-01T00:00:00Z", "location": "Cul2vate, Ellington Ag Center",
                        "source": "aperture-regression"}).encode()
     req = urllib.request.Request(RELAY_URL, data=body, headers={"Content-Type": "application/json"})
@@ -137,7 +139,8 @@ def main() -> None:
     args = ap.parse_args()
 
     key = None if args.e2e else nim_key()
-    ask = (lambda img, label: ask_relay(img, label)) if args.e2e else (lambda img, label: ask_nim(img, key))
+    ask = (lambda img, label: ask_relay(img, label)) if args.e2e else (
+        lambda img, label: ask_nim(img, key, "Kale" if "phantom" in label else "—"))
     print(f"target: {'live relay ' + RELAY_URL if args.e2e else 'NIM ' + MODEL}\n")
 
     failures = 0
@@ -172,6 +175,18 @@ def main() -> None:
             print("  ✗ FAIL: model is biased to 'empty' — it would log 0 lb for real donations"); failures += 1
         else:
             print("  ✓ PASS")
+
+    # The realistic dock failure: a volunteer types the item, then taps before the
+    # load is staged. The description must never conjure goods into an empty zone.
+    print("\nPHANTOM-GOODS control — empty zone WITH an item typed (must stay empty)")
+    if NEGATIVE.exists():
+        res = ask(shrink(NEGATIVE), "phantom control, empty zone, item typed")
+        weight, item = res.get("weight_lbs"), res.get("item_type")
+        print(f"  -> item={item!r} weight={weight}")
+        if item == "empty" or weight in (0, 0.0):
+            print("  ✓ PASS")
+        else:
+            print("  ✗ FAIL: the typed description created goods in an empty zone"); failures += 1
 
     print("\n" + ("ALL CONTROLS PASSED ✅" if failures == 0 else f"{failures} CONTROL(S) FAILED ❌"))
     sys.exit(1 if failures else 0)

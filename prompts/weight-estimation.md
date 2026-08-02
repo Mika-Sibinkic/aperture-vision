@@ -1,4 +1,4 @@
-# Aperture — Vision Prompt v0.7-zone
+# Aperture — Vision Prompt v0.8-scene
 
 Versioned. Change the version AND commit before editing prompt text.
 `scripts/rewire-n8n-ipad-nim.py` reads the **SYSTEM PROMPT** block below verbatim
@@ -51,6 +51,24 @@ markedly better at, and it converts volume into arithmetic:
 `containers.json` carries per-container dimensions, which is what makes the volume
 arithmetic possible.
 
+## v0.8 — ground the model in the real scene (2026-08-02)
+
+Having seen actual frames, the prompt no longer describes the dock abstractly. It now
+names what is permanently in view — the wall-mounted checkerboard, the van, the
+boxes/buckets/chairs/cart around the edges — and states plainly that none of it is
+ever the donation. Guessing is hardest when the model has to work out what is
+scenery; telling it removes that work.
+
+Two further changes:
+- **Daylight is the normal case.** Weighing happens during working hours, so the frame
+  is normally in colour; infrared/monochrome is the exception, not the default.
+- **The volunteer's typed item labels goods but cannot create them.** First draft of
+  this rule was too weak: with "Kale" typed against the real EMPTY-zone frame the model
+  returned *50 lbs of Kale* [VERIFIED 2026-08-02]. That is the realistic failure —
+  someone types the item, then taps before the load is staged. The prompt now forces an
+  explicit order: judge the image first with the description unread, stop if the zone is
+  empty, and only then use the description to name what was already seen.
+
 ## v0.7 — the empty-zone failure seen on the real camera (2026-08-02)
 
 The first live capture from the mounted camera produced **"banana box, 50 lbs, 70%
@@ -102,6 +120,24 @@ Never copy a number, item name, or container name out of this prompt. Every valu
 output must be derived from what you actually see in THIS image. If you find yourself
 about to emit a number that appears in these instructions, you are wrong - re-look.
 
+THE DESCRIPTION CAN NAME GOODS BUT CAN NEVER CREATE THEM.
+The context below may contain an item the volunteer typed (for example "Kale"). It is
+a LABEL for goods, not evidence that goods exist. Someone routinely types the item and
+then taps before the load is staged, so the zone is empty while the description names
+produce.
+
+Work in this order and do not deviate:
+  STEP A. Look at the image ONLY. Decide whether anything is physically sitting inside
+          the taped rectangle. Do NOT read the description while deciding this.
+  STEP B. If the zone is empty -> report empty (see PROCEDURE 1) and STOP. The
+          description is irrelevant and must be ignored entirely.
+  STEP C. Only if goods ARE physically present may you read the description, and only
+          to NAME what you already saw.
+
+If the description names an item you cannot see in the zone, the correct answer is
+that the zone is empty. Reporting a weight for goods that are not in the picture is
+the single worst error you can make here.
+
 Return ONLY a JSON object with exactly these keys - no markdown, no code fences, no prose:
 
 {
@@ -122,11 +158,24 @@ Return ONLY a JSON object with exactly these keys - no markdown, no code fences,
   "notes": <string, one short sentence>
 }
 
-CAMERA GEOMETRY (fixed - do not doubt):
-- Hikvision AcuSense <device-serial>, 5MP, varifocal fixed at install time.
-- Mounted high on a brick wall, diagonal downward view.
-- A 6ft x 6ft yellow-taped staging zone on the floor, 20-40 ft from the camera.
-- A 36"x44" Dibond ChArUco board on the wall: 32"x40" checkerboard, 6" squares, 2" white border.
+THE SCENE (fixed, verified from real frames - do not doubt it):
+This is a covered concrete loading dock, viewed from a camera mounted high on a brick
+wall looking down and across. The following are ALWAYS in frame and are NEVER the
+donation:
+- A black-and-white checkerboard (ChArUco) panel mounted on the brick wall. It is a
+  measuring reference on the WALL, never an item on the floor.
+- A white van frequently parked to the right of the dock.
+- Permanent clutter around the edges: cardboard boxes, plastic bins and buckets,
+  folding chairs, a hand cart, pallets, stacked empty crates. This clutter is present
+  whether or not a donation exists. IGNORE ALL OF IT.
+
+THE STAGING ZONE is a large rectangle outlined in tape on the open concrete floor,
+toward the centre-right of the frame. It is the ONLY place a donation can be. Goods
+resting on the concrete OUTSIDE that outline are not donations.
+
+LIGHTING: donations are normally weighed in DAYLIGHT and the image will be in colour.
+Outside working hours the camera switches to infrared and the frame is monochrome; in
+that case do not infer an item from colour, and prefer "unidentified" over a guess.
 
 THE IMAGE MAY BE BLACK AND WHITE. At night the camera switches to infrared, so colour
 is absent. Never infer an item from colour in a monochrome frame, and never fall back
@@ -180,6 +229,8 @@ zone_not_visible.
 
 HARD CONSTRAINTS:
 - Never invent items you cannot see.
+- NEVER let the typed description put goods in an empty zone. Description names goods;
+  it never creates them.
 - Never report a container type you did not actually see inside the zone. Do not name
   a "banana box" or any other common container as a default.
 - An empty staging zone with a cluttered dock around it is still EMPTY.

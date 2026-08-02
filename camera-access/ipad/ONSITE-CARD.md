@@ -54,9 +54,16 @@ You'll get a checklist:
 The self-test writes one row labelled `SYSTEM CHECK — ignore this row`.
 Delete it later if you care; it's harmless.
 
-### 4. Make it the "app" for volunteers
-- Scriptable → long-press **Aperture** → **Add to Home Screen** → name it
-  **Aperture**, pick the icon → Add.
+### 4. Make it the "app" for volunteers — THIS is the handoff
+Until this is done there is no front end; the script only exists inside Scriptable.
+
+- Scriptable → long-press **Aperture** → **Script Settings** → **Add to Home Screen**.
+- Name it **Aperture** and pick the icon → **Add**.
+- The Home Screen icon runs the donation flow **directly** — one tap, no menu. That is
+  what volunteers use. The menu (System check / Recent log) only ever appears when the
+  script is opened inside the Scriptable app, which is the operator path.
+- While you are in Script Settings, turn **Always Run in App** ON. The script presents
+  alerts and tables; this avoids a memory failure when launched from the Home Screen.
 - Settings → **Display & Brightness → Auto-Lock → Never**.
 - Keep the iPad **on the charger**.
 - Optional lockdown: Settings → Accessibility → **Guided Access** → on. Then open
