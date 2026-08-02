@@ -1,4 +1,4 @@
-# Aperture — Vision Prompt v0.4-nim
+# Aperture — Vision Prompt v0.5-count
 
 Versioned. Change the version AND commit before editing prompt text.
 `scripts/rewire-n8n-ipad-nim.py` reads the **SYSTEM PROMPT** block below verbatim
@@ -37,8 +37,23 @@ looked completely confident doing it.
 
 Re-run both any time: `python3 scripts/vision-regression-test.py`.
 
-Model: `meta/llama-3.2-90b-vision-instruct` on NVIDIA NIM. `llama-3.2-11b-vision`
-was rejected — it returns narrative prose instead of JSON. Latency ≈ 13 s.
+Model: `nvidia/nemotron-nano-12b-v2-vl` on NVIDIA NIM (see the model note below).
+`llama-3.2-11b-vision` was rejected — it returns narrative prose instead of JSON.
+
+## v0.5 — count containers instead of guessing at a pile
+
+A single camera cannot see stack height, so estimating an amorphous pile's volume is
+the least reliable thing we ask for. Counting discrete containers is a task VLMs are
+markedly better at, and it converts volume into arithmetic:
+
+    volume = container_count x container_volume x fill_fraction
+
+`containers.json` already carries per-container tare and dimensions, so counting also
+fixes a real bug: tare was subtracted **once** regardless of how many containers were
+present, under-reporting a 6-crate load by 5 tares.
+
+Volunteers are NOT asked for a count — it is a visual cue the model reads. They only
+type the item, which is the habit they already have.
 
 ---
 
@@ -56,6 +71,8 @@ Return ONLY a JSON object with exactly these keys - no markdown, no code fences,
 {
   "item_type": <string: what you actually see, or "empty" if the zone has no donation>,
   "container_type": <string: one of banana-box-standard | milk-crate-standard | bread-tray-plastic | 5gal-bucket-empty | pallet-wood-48x40 | cardboard-box-small | cardboard-box-medium | cardboard-box-large | reusable-shopping-bag | produce-mesh-bag-50lb | no-container-loose | unknown>,
+  "container_count": <integer: how many separate containers of this SAME item are in the zone; 1 if a single container; 0 if loose on the floor with no container>,
+  "container_fill_fraction": <number 0..1: how full each container is on average - 1.0 = level with the rim, 0.5 = half>,
   "inside_zone": <boolean>,
   "charuco_detected": <boolean>,
   "pixels_per_inch": <number or null>,
@@ -87,15 +104,26 @@ PROCEDURE:
    squares, charuco_detected=true and compute pixels_per_inch from the 6" squares.
    Otherwise charuco_detected=false, fall back to pallet scale (48"x40"), and reduce
    confidence by 0.15.
-3. Classify item_type from what is visibly present.
+3. Classify item_type from what is visibly present. Expect ONE item type per photo.
 4. Classify container_type from the enum above; "no-container-loose" if goods sit
    directly on the floor/pallet.
-5. Estimate volume from the floor-plane footprint times visible stack height.
-6. Apply a density prior appropriate to the item you identified (leafy produce is far
+5. COUNT THE CONTAINERS. This matters more than any other number you produce.
+   Count every separate crate/box/bag/bucket of that item in the zone, including
+   ones stacked on top of each other - a stack of 4 crates is container_count 4,
+   not 1. Look at stack edges and side profiles to count layers you cannot see
+   from directly above. If containers are identical and stacked in a block,
+   count = (units per layer) x (number of layers). Set container_fill_fraction
+   to how full a typical one is.
+6. Estimate volume as: container_count x (one container's internal volume) x
+   container_fill_fraction. Only if container_type is "no-container-loose" should
+   you fall back to estimating the floor footprint times the visible pile height.
+7. Apply a density prior appropriate to the item you identified (leafy produce is far
    lighter per volume than canned goods or frozen meat).
-7. weight_lbs is your best single estimate; weight_lbs_low/high bracket your uncertainty.
-   These must be three DIFFERENT numbers you computed, not fixed values.
-8. confidence is calibrated: 0.95 = "within 10%", 0.5 = "could be off by half".
+8. weight_lbs is the TOTAL net product weight across ALL containers - the weight of
+   the food only, excluding the containers themselves (tare is subtracted downstream
+   from container_type x container_count, so do NOT subtract it yourself).
+   weight_lbs_low/high bracket your uncertainty. Three DIFFERENT computed numbers.
+9. confidence is calibrated: 0.95 = "within 10%", 0.5 = "could be off by half".
 
 FAILURE FLAGS (use only when they apply): partial_occlusion, mixed_items,
 severe_perspective, low_light, glare_or_shadow, oversized, ambiguous_container,

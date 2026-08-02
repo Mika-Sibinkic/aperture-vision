@@ -65,6 +65,28 @@ async function archivePhoto(
   }
 }
 
+/**
+ * Persist one donation record (tap + the parsed result n8n returned) as its own
+ * small blob, so /api/export can assemble a running CSV. One file per donation —
+ * never an append to a shared file — so concurrent taps cannot clobber each other.
+ *
+ * Non-blocking, like the photo archive: the volunteer's result must not depend on
+ * bookkeeping succeeding.
+ */
+async function writeRecord(record: Record<string, unknown>, donationId: string, triggeredAt: string) {
+  try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) return;
+    const day = triggeredAt.slice(0, 10);
+    await put(`records/${day}/${donationId}.json`, JSON.stringify(record), {
+      access: "private",
+      contentType: "application/json",
+      addRandomSuffix: false,
+    });
+  } catch {
+    /* bookkeeping must never break a tap */
+  }
+}
+
 export async function POST(req: NextRequest) {
   const webhook = process.env.N8N_WEBHOOK_URL;
   const token = process.env.APERTURE_SHARED_TOKEN;
@@ -128,6 +150,22 @@ export async function POST(req: NextRequest) {
 
     try {
       const parsed = JSON.parse(text);
+      await writeRecord(
+        {
+          ...(parsed as Record<string, unknown>),
+          donation_id: donationId,
+          triggered_at: triggeredAt,
+          location: payload.location,
+          description: payload.description,
+          image_url: archive.url,
+          image_sha256: archive.sha256,
+          image_bytes: archive.bytes,
+          source: payload.source,
+          logged_at: new Date().toISOString(),
+        },
+        donationId,
+        triggeredAt
+      );
       return NextResponse.json(parsed);
     } catch {
       // An empty body here means the workflow ended without hitting a Respond node
