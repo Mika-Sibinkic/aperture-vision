@@ -26,7 +26,7 @@ volunteer taps icon (Scriptable/Shortcut, foreground)
   └─ HTTP Digest GET http://<camera-ip>/ISAPI/Streaming/channels/101/picture  (LAN)
        └─ JPEG -> base64
             └─ POST https://<vercel-app-host>/api/donate  {image_b64, ...}
-                 └─ n8n: use image_b64 -> Vision (NIM) -> parse -> Google Sheet
+                 └─ n8n: image_b64 -> Vision (NIM) -> parse -> Google Sheet + Farmbrite
                       └─ weight + item returned -> shown on the iPad
 ```
 
@@ -51,11 +51,11 @@ below is background.
 `Aperture.local.js` (gitignored — it holds the camera password). AirDrop it to the
 iPad. That removes every settings prompt from the on-site procedure.
 
-## Backend status: LIVE and verified (2026-07-28)
+## Backend status: LIVE and verified (2026-08-02)
 
-Vercel prod relay → n8n (rewired, bridge hop deleted) → NVIDIA NIM
-`llama-3.2-90b-vision-instruct` → Google Sheet. Real POST returns 200 in ~11.5 s and
-writes a row. Both regression controls pass:
+Vercel prod relay → n8n (17 nodes, active) → NVIDIA NIM
+`nvidia/nemotron-nano-12b-v2-vl`, prompt v0.6-net → Google Sheet + Farmbrite draft
+order. A real POST returns 200 in 9.8–12.5 s and writes a row. Both regression controls pass:
 `python3 scripts/vision-regression-test.py --e2e`. The **only** hop not yet exercised
 is the iPad reaching the camera over the Cul2vate LAN — that is what the self-test checks.
 
@@ -69,7 +69,7 @@ is the iPad reaching the camera over the Cul2vate LAN — that is what the self-
    Keychain:)
    - Camera base URL: `http://<camera-ip>`
    - Username: `admin`
-   - Password: (see `SECRETS.local.md` — `<camera-password>`)
+   - Password: see `SECRETS.local.md`
    - Snapshot path: `/ISAPI/Streaming/channels/101/picture`
    - Relay URL: `https://<vercel-app-host>/api/donate`
    - Location label: `Cul2vate, Ellington Ag Center`
@@ -89,7 +89,7 @@ verifies → PUTs → reads back; `--restore <backup>` rolls back):
 
 1. **Relay** (`app/api/donate/route.ts`): accepts `image_b64`, `maxDuration` 120 s,
    legible error text. **Deployed to Vercel production.**
-2. **n8n** workflow `<n8n-workflow-id>` (now 15 nodes, active):
+2. **n8n** workflow `<n8n-workflow-id>` (now 17 nodes, active):
    - Dead bridge-fetch node **deleted**; `Build vision request` reads the posted
      `image_b64` and assembles the NIM call (including the mandatory
      `response_format: json_object`).

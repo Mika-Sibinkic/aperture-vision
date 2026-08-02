@@ -1,5 +1,9 @@
 # Aperture
 
+> **Current state, what the developer can change remotely vs. on site, and the
+> scheduled-decay risks: [`docs/OPERATIONS.md`](docs/OPERATIONS.md).**
+> Pre-handoff risk review: [`docs/AUDIT-PREHANDOFF.md`](docs/AUDIT-PREHANDOFF.md).
+
 Null Systems' AI donation-weighing camera. This repo is the deployment for
 Cul2vate Nashville at the Ellington Ag Center loading dock.
 
