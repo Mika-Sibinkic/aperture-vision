@@ -88,6 +88,17 @@ def main() -> None:
     if problems:
         sys.exit("ERROR: generated file is not usable: " + "; ".join(problems))
 
+    # Refuse to hand over a build that is not actually runnable. `node --check` alone
+    # has already let functionless files reach the device.
+    import subprocess
+    check = REPO / "scripts" / "check-ipad-script.sh"
+    if check.exists():
+        result = subprocess.run(["bash", str(check), str(TARGET)], capture_output=True, text=True)
+        if result.returncode != 0:
+            TARGET.unlink(missing_ok=True)
+            sys.exit("ERROR: generated build failed verification (deleted):\n" + result.stdout + result.stderr)
+        print("verified: " + result.stdout.strip().splitlines()[-1])
+
     print(f"wrote  {TARGET.relative_to(REPO)}  ({TARGET.stat().st_size // 1024} KB, mode 600)")
     print(f"  camera : {base}  user={user}  pass={'*' * len(password)}")
     print(f"  relay  : {RELAY}")
