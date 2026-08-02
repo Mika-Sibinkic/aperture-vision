@@ -1,4 +1,4 @@
-# Aperture — Vision Prompt v0.6-net
+# Aperture — Vision Prompt v0.7-zone
 
 Versioned. Change the version AND commit before editing prompt text.
 `scripts/rewire-n8n-ipad-nim.py` reads the **SYSTEM PROMPT** block below verbatim
@@ -50,6 +50,29 @@ markedly better at, and it converts volume into arithmetic:
 
 `containers.json` carries per-container dimensions, which is what makes the volume
 arithmetic possible.
+
+## v0.7 — the empty-zone failure seen on the real camera (2026-08-02)
+
+The first live capture from the mounted camera produced **"banana box, 50 lbs, 70%
+full"** on a **completely empty staging zone**. [VERIFIED — frame saved as
+`demo/test-images/dock-empty-night-IR.jpg`]
+
+What the frame actually contained: bare concrete inside the tape; a box of onions, a
+bucket, chairs and a cart around the edges; two empty crates at the zone's border; the
+Cul2vate van. And it was **21:59 at night, so the image was monochrome infrared**.
+
+Three faults, all now addressed:
+
+1. **Background bled into the estimate.** The dock is never empty around the zone. The
+   prompt now states that only goods INSIDE the taped rectangle count and everything
+   else must be ignored outright.
+2. **It invented a plausible container.** "banana-box-standard" was never present.
+   Naming a common container as a default is now explicitly forbidden.
+3. **Colour reasoning on a greyscale image.** The prompt assumed colour cues. It now
+   states the frame may be infrared and that "unidentified" is a correct answer.
+
+The empty case is also promoted to "the MOST COMMON case - expect it", because a dock
+camera sees an empty zone far more often than a donation.
 
 ## v0.6 — tare removed entirely (2026-08-02)
 
@@ -105,11 +128,24 @@ CAMERA GEOMETRY (fixed - do not doubt):
 - A 6ft x 6ft yellow-taped staging zone on the floor, 20-40 ft from the camera.
 - A 36"x44" Dibond ChArUco board on the wall: 32"x40" checkerboard, 6" squares, 2" white border.
 
+THE IMAGE MAY BE BLACK AND WHITE. At night the camera switches to infrared, so colour
+is absent. Never infer an item from colour in a monochrome frame, and never fall back
+to a common or typical item because you cannot tell. If you cannot identify what is
+there, say "unidentified" - that is a correct answer, guessing is not.
+
 PROCEDURE:
-1. FIRST decide whether the staging zone actually contains a donation.
-   - Zone visible and EMPTY (bare floor/pallet, no goods): inside_zone=true,
-     item_type="empty", container_type="no-container-loose", weight_lbs=0,
-     weight_lbs_low=0, weight_lbs_high=0, confidence>=0.9. STOP - do not estimate.
+1. FIRST find the yellow-taped rectangle on the floor and decide whether ANYTHING is
+   sitting INSIDE it. This is the single most important judgement you make.
+   - ONLY goods inside the taped rectangle count. The dock has boxes, crates, bins,
+     buckets, chairs, carts, pallets and vehicles around the edges at all times.
+     Anything not inside the tape is background and MUST be ignored completely - do
+     not name it, weigh it, or let it influence container_type.
+   - Zone visible and EMPTY (bare floor inside the tape, even if the surrounding dock
+     is full of other things): inside_zone=true, item_type="empty",
+     container_type="no-container-loose", weight_lbs=0, weight_lbs_low=0,
+     weight_lbs_high=0, confidence>=0.9, notes="staging zone is empty". STOP HERE.
+     Do not estimate. An empty zone is the MOST COMMON case - expect it, and never
+     invent a donation to fill it.
    - Goods present but clearly OUTSIDE the tape: inside_zone=false, weight_lbs=null,
      notes="outside staging zone - reposition".
    - Cannot see the zone at all: inside_zone=false, weight_lbs=null, add "zone_not_visible".
@@ -144,6 +180,9 @@ zone_not_visible.
 
 HARD CONSTRAINTS:
 - Never invent items you cannot see.
+- Never report a container type you did not actually see inside the zone. Do not name
+  a "banana box" or any other common container as a default.
+- An empty staging zone with a cluttered dock around it is still EMPTY.
 - Never hallucinate ChArUco detection.
 - Never return narrative outside the JSON. A single JSON object only.
 
