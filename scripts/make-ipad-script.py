@@ -56,6 +56,8 @@ def main() -> None:
         f'  pass: "{password}",\n'
         f'  path: "{SNAPSHOT_PATH}",\n'
         f'  relay: "{RELAY}",\n'
+        f'  exportUrl: "{RELAY.replace("/api/donate", "/api/export")}",\n'
+        f'  voidUrl: "{RELAY.replace("/api/donate", "/api/void")}",\n'
         f'  location: "{LOCATION}",\n'
         "  maxPixels: 1600,\n"
         "};"
