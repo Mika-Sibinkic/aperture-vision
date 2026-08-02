@@ -220,6 +220,19 @@ async function runSetup() {
   }
 }
 
+
+// Scriptable's Request.timeoutInterval has proven unreliable on-device (a camera
+// request sat past 60 s with a 20 s interval set), so every network step is raced
+// against a hard timer. A step that cannot finish must FAIL VISIBLY, never hang.
+function withTimeout(promise, seconds, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      Timer.schedule(seconds * 1000, false, () =>
+        reject(new Error(label + " timed out after " + seconds + "s")))),
+  ]);
+}
+
 // Pull one JPEG from the mounted camera over the LAN.
 async function grabFrame(cfg) {
   const url = cfg.base.replace(/\/+$/, "") + cfg.path;
@@ -327,208 +340,63 @@ async function showError(message) {
 // One tap that proves every hop, in plain language.
 async function selfTest(cfg) {
   const steps = [];
+  let note = "Checking the camera\u2026";
   const t = new UITable();
   const render = () => {
     t.removeAllRows();
-    const h = t.addRow(); h.isHeader = true; h.addText("Aperture self-test");
-    for (const s of steps) { const r = t.addRow(); r.addText(s.ok ? "✅ " + s.name : "❌ " + s.name); r.addText(s.detail || ""); }
+    const h = t.addRow(); h.isHeader = true; h.height = 56; h.addText("Aperture system check", note);
+    for (const s of steps) {
+      const r = t.addRow();
+      r.addText((s.ok ? "\u2705 " : "\u274c ") + s.name, s.detail || "");
+    }
     t.reload();
   };
-  // NOT awaited: present() resolves only when the user dismisses the table, so
-  // awaiting it here meant the checks never started and the screen sat blank.
+  // Draw BEFORE any network call, and do not await present() — awaiting it blocks
+  // until the user dismisses the view. A blank screen must never be possible.
+  render();
   t.present(false);
 
   let frame = null;
   try {
-    frame = await grabFrame(cfg);
+    frame = await withTimeout(grabFrame(cfg), 25, "Camera");
     steps.push({ ok: true, name: "Camera connected", detail: Math.round(frame.toBase64String().length / 1024) + " KB" });
-  } catch (e) {
-    steps.push({ ok: false, name: "Camera", detail: String(e.message).split("\n")[0] });
+    note = "Sending the photo\u2026";
     render();
+  } catch (e) {
+    steps.push({ ok: false, name: "Camera", detail: String(e.message).split("\n")[0].slice(0, 120) });
+    note = "Stopped here.";
+    render();
+    await finishAlert(steps);
     return steps;
   }
-  render();
 
   const small = shrink(frame, cfg.maxPixels);
   steps.push({ ok: true, name: "Photo ready", detail: Math.round(small.toBase64String().length / 1024) + " KB" });
+  note = "Weighing (10\u201325 s)\u2026";
   render();
 
   try {
-    const res = await postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK — ignore this row");
-    const ok = res && (typeof res.weight_lbs === "number" || res.item_type);
+    const res = await withTimeout(
+      postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK \u2014 ignore this row"), 90, "Server");
+    const ok = Boolean(res && (typeof res.weight_lbs === "number" || res.item_type));
     steps.push({ ok: ok, name: "Weight recorded",
-                 detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
+      detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
   } catch (e) {
-    steps.push({ ok: false, name: "Server", detail: String(e.message).slice(0, 90) });
+    steps.push({ ok: false, name: "Server", detail: String(e.message).slice(0, 120) });
   }
+  note = "Done.";
   render();
-
-  const allOk = steps.every((s) => s.ok);
-  steps.push({ ok: allOk, name: allOk ? "ALL GOOD — ready for volunteers" : "NOT READY — see the ❌ above", detail: "" });
-  render();
-
-  // An Alert is guaranteed to surface even if the table was dismissed early.
-  const summary = new Alert();
-  summary.title = allOk ? "All good" : "Not ready";
-  summary.message = steps.map((x) => (x.ok ? "✅ " : "❌ ") + x.name + (x.detail ? "  —  " + x.detail : "")).join("\n");
-  summary.addAction("OK");
-  await summary.present();
+  await finishAlert(steps);
   return steps;
 }
 
-// Live progress, shown immediately. The volunteer must SEE that something is
-// happening, or they will tap again during the wait.
-function progressTable() {
-  const t = new UITable();
-  t.showSeparators = true;
-  const render = (lines, headline) => {
-    t.removeAllRows();
-    const h = t.addRow();
-    h.isHeader = true;
-    h.height = 60;
-    h.addText(headline);
-    for (const line of lines) {
-      const r = t.addRow();
-      r.addText(line);
-    }
-    t.reload();
-  };
-  return { table: t, render };
-}
-
-async function runDonation(cfg) {
-  const state = readState();
-  const now = Date.now();
-
-  // Guard: a run is already in flight -> do NOT start a second one.
-  if (state.inFlightAt && now - state.inFlightAt < IN_FLIGHT_WINDOW_MS) {
-    const a = new Alert();
-    a.title = "Already logging";
-    const last = state.lastResult;
-    a.message =
-      "This donation is still being weighed — please wait a few seconds.\n\n" +
-      "Do NOT tap again; tapping twice records the same donation twice." +
-      (last ? `\n\nLast logged: ${last.summary} at ${last.at}` : "");
-    a.addAction("OK");
-    await a.present();
-    return;
-  }
-
-  // Claim the slot before any network work, so a mid-run power-off still
-  // leaves a marker rather than a half-logged donation with no trace.
-  const donationId = UUID.string().toLowerCase();
-  writeState({ inFlightAt: now, inFlightId: donationId });
-
-  const ui = progressTable();
-  ui.render(["Reading the camera…"], "Weighing");
-  ui.table.present(false);
-
-  try {
-    const frame = await withRetry("camera", () => grabFrame(cfg));
-    ui.render(["Photo captured", "Weighing…", "", "This takes about 10–25 seconds."], "Weighing");
-
-    const small = shrink(frame, cfg.maxPixels);
-    const result = await withRetry("relay", () => postToRelay(cfg, small.toBase64String(), "", donationId));
-
-    const summary = typeof result.weight_lbs === "number"
-      ? `${result.weight_lbs.toFixed(1)} lbs ${result.item_type || ""}`.trim()
-      : "logged";
-    writeState({
-      inFlightAt: null,
-      inFlightId: null,
-      lastResult: { summary, at: new Date().toLocaleTimeString(), donation_id: donationId },
-    });
-    await showResult(result);
-  } catch (e) {
-    // Release the lock so the next tap can retry immediately — a failed run must
-    // not lock the dock out for the full window.
-    writeState({ inFlightAt: null, inFlightId: null });
-    throw e;
-  }
-}
-
-// Recent log with one-tap undo. Mis-taps happen on a dock — wrong item typed, photo
-// taken before the load was staged, a duplicate. Without this the only fix is asking
-// someone to hand-edit a spreadsheet later, which never happens.
-async function showHistory(cfg) {
-  const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
-  req.timeoutInterval = 60;
-  let rows = [];
-  try {
-    const data = await req.loadJSON();
-    rows = Array.isArray(data.rows) ? data.rows : [];
-  } catch (e) {
-    await showError("Couldn't load the recent log: " + (e.message || e));
-    return;
-  }
-  rows.reverse();                                   // newest first
-  const recent = rows.slice(0, 25);
-
-  const t = new UITable();
-  t.showSeparators = true;
-  const draw = () => {
-    t.removeAllRows();
-    const h = t.addRow();
-    h.isHeader = true;
-    h.height = 60;
-    h.addText("Recent donations", recent.length ? "Tap one to undo it" : "Nothing logged yet");
-    for (const r of recent) {
-      const row = new UITableRow();
-      row.height = 58;
-      const when = String(r.triggered_at || "").replace("T", " ").slice(5, 16);
-      const lbs = typeof r.weight_lbs === "number" ? r.weight_lbs.toFixed(1) + " lbs" : "—";
-      row.addText(`${lbs}  ${r.item_type || ""}`.trim(), `${when}   ${r.description || ""}`.trim());
-      row.onSelect = async () => {
-        const a = new Alert();
-        a.title = "Undo this donation?";
-        a.message = `${lbs} ${r.item_type || ""}\n${when}\n\nIt will be removed from the record and from Farmbrite. The photo is kept.`;
-        a.addDestructiveAction("Undo it");
-        a.addCancelAction("Keep it");
-        if ((await a.present()) !== 0) return;
-
-        const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
-        v.method = "POST";
-        v.timeoutInterval = 60;
-        v.headers = { "Content-Type": "application/json" };
-        v.body = JSON.stringify({ donation_id: r.donation_id, reason: "undone on the iPad" });
-        try {
-          const res = await v.loadJSON();
-          const done = new Alert();
-          done.title = res && res.ok ? "Removed" : "Couldn't remove it";
-          done.message = res && res.ok
-            ? "That donation is no longer in the record."
-            : String((res && res.error) || "Unknown problem.");
-          done.addAction("OK");
-          await done.present();
-          if (res && res.ok) {
-            const i = recent.indexOf(r);
-            if (i >= 0) recent.splice(i, 1);
-            draw();
-          }
-        } catch (e) {
-          await showError("Couldn't remove it: " + (e.message || e));
-        }
-      };
-      t.addRow(row);
-    }
-    t.reload();
-  };
-  draw();
-  await t.present();
-}
-
-// Operator menu — only ever shown when opened from inside the Scriptable app.
-async function chooseMode() {
+async function finishAlert(steps) {
+  const allOk = steps.every((s) => s.ok);
   const a = new Alert();
-  a.title = "Aperture";
-  a.message = "What would you like to do?";
-  a.addAction("Log a donation");        // 0
-  a.addAction("System check");          // 1
-  a.addAction("Recent log (undo)");     // 2
-  a.addAction("Re-enter settings");     // 3
-  a.addCancelAction("Close");           // -1
-  const picked = await a.present();
-  return ["", "selftest", "history", "setup"][picked] ?? null;
+  a.title = allOk ? "All good \u2014 ready for volunteers" : "Not ready";
+  a.message = steps.map((x) => (x.ok ? "\u2705 " : "\u274c ") + x.name + (x.detail ? "\n     " + x.detail : "")).join("\n");
+  a.addAction("OK");
+  await a.present();
 }
 
 async function main() {
