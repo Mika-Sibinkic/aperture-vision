@@ -15,11 +15,15 @@
 // CONFIG is left blank, the script falls back to the iOS Keychain and prompts
 // once. This committed copy never contains credentials.
 //
-// RUN MODES (Scriptable "Parameter", or the Shortcut that calls it):
-//   ""          normal tap: capture -> weight
-//   "selftest"  checks every hop and reports PASS/FAIL in plain language
-//   "history"   recent donations, tap one to undo it
-//   "setup"     re-enter settings (Keychain mode only)
+// HOW MODES ARE CHOSEN (no typing, no parameters):
+//   Home-screen icon  -> logs a donation immediately. One tap. This is the volunteer
+//                        path and must never show a menu.
+//   Opened inside the -> shows a short menu: Log a donation / System check /
+//   Scriptable app       Recent log (undo) / Re-enter settings.
+//
+// `config.runsInApp` is what distinguishes the two, so the operator gets the tools and
+// the volunteer gets one button. A parameter is still honoured if one is supplied by a
+// Shortcut or the scriptable:///run URL scheme.
 // ---------------------------------------------------------------------------
 
 const CONFIG = {
@@ -506,8 +510,31 @@ async function showHistory(cfg) {
   await t.present();
 }
 
+// Operator menu — only ever shown when opened from inside the Scriptable app.
+async function chooseMode() {
+  const a = new Alert();
+  a.title = "Aperture";
+  a.message = "What would you like to do?";
+  a.addAction("Log a donation");        // 0
+  a.addAction("System check");          // 1
+  a.addAction("Recent log (undo)");     // 2
+  a.addAction("Re-enter settings");     // 3
+  a.addCancelAction("Close");           // -1
+  const picked = await a.present();
+  return ["", "selftest", "history", "setup"][picked] ?? null;
+}
+
 async function main() {
-  const mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "").toString().trim().toLowerCase();
+  let mode = ((typeof args !== "undefined" && (args.shortcutParameter || (args.plainTexts && args.plainTexts[0]))) || "")
+    .toString().trim().toLowerCase();
+
+  // No parameter and opened inside the app -> operator menu. From the home-screen
+  // icon (runsInApp === false) fall straight through to logging.
+  if (!mode && typeof config !== "undefined" && config.runsInApp) {
+    mode = await chooseMode();
+    if (mode === null) { Script.complete(); return; }
+  }
+
   const cfg = await resolveConfig(mode);
 
   if (mode === "selftest") { await selfTest(cfg); Script.complete(); return; }

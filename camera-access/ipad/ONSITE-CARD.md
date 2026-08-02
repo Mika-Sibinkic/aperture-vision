@@ -33,7 +33,10 @@ The same network as the camera. This is the only network requirement.
   in the script list. Long-press it → **Rename** → `Aperture`.
 
 ### 3. Run the self-test — this is the gate
-In Scriptable, long-press **Aperture** → **Run with Parameter** → type `selftest` → Run.
+In the **Scriptable app**, just tap **Aperture**. A menu appears — choose **System check**.
+
+(The menu only appears inside the Scriptable app. The Home Screen icon you add in step 4
+goes straight to logging a donation, so volunteers never see it.)
 
 You'll get a checklist:
 
