@@ -22,3 +22,4 @@ demo/output/
 camera-access/ipad/Aperture.local.js
 n8n/backups/
 .n8n-farmbrite-credential-id
+training-loop/residuals.jsonl
