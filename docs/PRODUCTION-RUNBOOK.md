@@ -1,4 +1,4 @@
-# Aperture — Production Runbook
+# Aperture: production runbook
 
 Full end-to-end launch checklist. Each section is ordered. Don't skip ahead.
 
@@ -27,7 +27,7 @@ Full end-to-end launch checklist. Each section is ordered. Don't skip ahead.
 ### 0. Camera on-site (done)
 - [x] Camera powered (orange PoE LED)
 - [x] Static IP <camera-ip> on Cul2vate LAN
-- [x] Zoom + focus locked — ChArUco + 6×6 yellow zone both sharp
+- [x] Zoom + focus locked; ChArUco + 6×6 yellow zone both sharp
 - [x] Focus mode = MANUAL (won't drift)
 
 ### 1. Camera cloud relay (`docs/HIK-CONNECT-SETUP.md`)
@@ -55,16 +55,16 @@ Full end-to-end launch checklist. Each section is ordered. Don't skip ahead.
 - [ ] OpenAI API key (or Anthropic, or NIM Llama 3.2 Vision)
 
 #### 3a. Farmbrite
-See `scripts/discover-farmbrite-endpoint.sh` — run it once the client contact provides an
+See `scripts/discover-farmbrite-endpoint.sh`; run it once the client contact provides an
 admin API key and it auto-creates the "Aperture Donations" inventory type
 and prints the IDs.
 
 Until then: n8n workflow has a `Guard: Farmbrite configured` IF node that
-gracefully skips Farmbrite logging when env vars are empty — the Google
+gracefully skips Farmbrite logging when env vars are empty; the Google
 Sheet still gets every record.
 
 #### 3b. Google Sheet template
-Create a new Sheet named "Aperture — Cul2vate Donations". Add a tab called
+Create a new Sheet named "Aperture: Cul2vate Donations". Add a tab called
 "Donations" with these columns in row 1 (exact headers, exact order):
 
 ```
@@ -107,13 +107,13 @@ Copy the Sheet ID from the URL (`docs.google.com/spreadsheets/d/<THIS>/edit`).
 - [ ] Verify: big button is pressable, description textarea works, button
       press returns the n8n response text on success
 
-### 7. Live smoke tests — 3 donations
-- [ ] Donation 1 — small box of mixed produce inside the 6×6 zone.
+### 7. Live smoke tests: 3 donations
+- [ ] Donation 1: small box of mixed produce inside the 6×6 zone.
       Verify Sheet row + Farmbrite inventory delta
-- [ ] Donation 2 — larger stack, partially outside zone.
+- [ ] Donation 2: larger stack, partially outside zone.
       Verify `inside_zone=false`, error message back to iPad, no Sheet row
-- [ ] Donation 3 — normal donation, check confidence + weight range
-- [ ] Check n8n execution history — all three visible with inputs + outputs
+- [ ] Donation 3: normal donation, check confidence + weight range
+- [ ] Check n8n execution history; all three visible with inputs + outputs
 
 ## Day-of-launch
 
@@ -130,20 +130,20 @@ When the client contact/Joshua walk up to use it the first time:
 ### "The button doesn't do anything"
 1. iPad connected to WiFi? (check Settings → WiFi)
 2. Open iPad Safari manually, hit `https://<vercel>/api/donate` (expect 405
-   Method Not Allowed for GET — this proves Vercel is reachable)
+   Method Not Allowed for GET; this proves Vercel is reachable)
 3. Vercel logs (Vercel dashboard → Deployments → Function Logs)
 
 ### "Every donation says camera unreachable"
-1. Hit `https://aperture-bridge.<domain>/healthz` from your phone — 200?
+1. Hit `https://aperture-bridge.<domain>/healthz` from your phone. 200?
 2. If 503: `ssh mika@dell-g7` → `journalctl -u aperture-bridge -n 100`
 3. If bridge is fine but `fetch_pic_url` is throwing: check
    hik-connect.com login works. Camera Platform Access status still Online?
 
 ### "Weights are way off"
-1. Check `docs/FIRMWARE-FROZEN.md` — firmware still matches? If no, roll back.
+1. Check `docs/FIRMWARE-FROZEN.md`; firmware still matches? If no, roll back.
 2. Look at the residuals log (`training-loop/residuals.jsonl`). Is the bias
    table stale?
-3. Has the camera moved? (Zoom/focus/position locked and MANUAL — but someone
+3. Has the camera moved? (Zoom/focus/position locked and MANUAL, but someone
    could have physically hit it.) Compare a fresh snapshot vs the baseline.
 
 ### "Farmbrite isn't getting records but the Sheet is"

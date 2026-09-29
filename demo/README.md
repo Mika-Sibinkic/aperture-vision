@@ -1,4 +1,4 @@
-# Aperture — Static demo + accuracy harness
+# Aperture: static demo + accuracy harness
 
 Built 2026-05-07 for the EnterpriseCo/the prospect contact meeting. Lives entirely on Mika's Mac;
 no Dell, n8n, or Hik-Connect dependency.
@@ -12,7 +12,7 @@ against ground-truth weights captured on a kitchen scale.
 
 The architecture matters more than the numbers. This is the static-mode v1
 pipeline. For EnterpriseCo's <500 ms in-motion conveyor target, see
-`docs/EnterpriseCo-conveyor-architecture.md` — same core, different sensors and
+`docs/EnterpriseCo-conveyor-architecture.md`: same core, different sensors and
 runtime.
 
 ## File layout
@@ -53,7 +53,7 @@ The `run_demo.sh` script auto-installs the demo venv on first run.
 | Total inner corners | 63 | (8-1)(10-1) |
 
 **Note:** The legacy `Food-Bank-Inventory-Management/generate_charuco_board.py`
-hardcoded `DICT_4X4_50` and 6" squares — that does NOT match the
+hardcoded `DICT_4X4_50` and 6" squares, which does NOT match the
 AlphaGraphics-printed board actually deployed at Cul2vate. Use this folder's
 defaults (DICT_6X6_50 / 4") for any new test set.
 

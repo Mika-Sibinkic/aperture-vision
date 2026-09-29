@@ -1,4 +1,4 @@
-# Aperture — Network Debug Commands
+# Aperture: network debug commands
 
 On-site debug commands when a Hikvision camera doesn't show up on the network.
 
@@ -22,13 +22,13 @@ brew install nmap          # one-time
 sudo nmap -sn <lan-subnet>
 ```
 
-`-sn` with a local /24 triggers ARP scanning — finds devices even if they
+`-sn` with a local /24 triggers ARP scanning; finds devices even if they
 ignore ICMP. Vendor names print next to each MAC (look for "Hikvision").
 
-## 3. SADP broadcast listener — the nuclear option
+## 3. SADP broadcast listener: the nuclear option
 
 Hikvision cameras broadcast SADP discovery packets on UDP 37020 every
-~20–30 sec. This listener finds the camera regardless of subnet, DHCP
+~20-30 sec. This listener finds the camera regardless of subnet, DHCP
 state, or whether it's responding to ARP.
 
 ```bash
@@ -59,7 +59,7 @@ print('done. unique broadcasters:', list(seen))
 
 Or just run: `./scripts/sadp-listen.sh`
 
-## 4. Active SADP discovery — ping the segment for Hikvision responses
+## 4. Active SADP discovery: ping the segment for Hikvision responses
 
 If the camera isn't broadcasting on its own, provoke a response by
 sending the SADP discovery query:
@@ -98,7 +98,7 @@ print('done. replies from:', list(seen))
 ```
 
 If no reply comes back on either listener, the camera isn't communicating
-at all — hardware/cable issue, not a network config issue.
+at all: hardware/cable issue, not a network config issue.
 
 ## 5. Factory-default IP probe (temporary Mac IP override)
 
@@ -122,12 +122,12 @@ mesh weirdness. Requires a USB-C → Ethernet adapter.
 1. Unplug the short Cat6 from Eero's LAN port (leave it attached to the
    POE160S `LAN IN`).
 2. Plug the free end of that Cat6 into the Mac via adapter.
-3. Mac should get a link-local or stay on WiFi DHCP — either way, set
+3. Mac should get a link-local or stay on WiFi DHCP; either way, set
    static: `<gateway-ip>00` as in §5.
 4. Browse `http://<camera-ip>`.
 
 If the camera answers here but not through the Eero, the Eero extender's
-LAN port is isolating wired clients — plug the injector into the **main
+LAN port is isolating wired clients; plug the injector into the **main
 Eero** instead of the extender.
 
 ## 7. Factory reset the camera
@@ -136,4 +136,4 @@ Hikvision bullets have a recessed pinhole on the back labeled RESET.
 Hold paperclip in it for **15 seconds** with the camera powered on.
 Camera reboots with factory defaults (including DHCP on, password clear).
 
-Use as a last resort — you'll need to re-adjust zoom/focus after.
+Use as a last resort; you'll need to re-adjust zoom/focus after.

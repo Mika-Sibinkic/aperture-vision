@@ -1,6 +1,6 @@
-# Aperture — operations & developer capability
+# Aperture: operations & developer capability
 
-> State: live · Optionality: low · Open to Change: yes — this file is the single
+> State: live · Optionality: low · Open to Change: yes. This file is the single
 > authoritative answer to "what is running right now, and what can I change without
 > driving to the site?". Update it in the same session as any architecture change.
 
@@ -16,7 +16,7 @@ Last verified: **2026-08-02**.
 | Trigger | Scriptable script on the on-site iPad, foreground at tap time | iPad | digest math verified vs RFC 2617; on-device hop pending |
 | Relay | Next.js route `/api/donate` (archives photo, forwards, writes record) | Vercel, `<vercel-app-host>` | live |
 | Orchestration | n8n workflow `<n8n-workflow-id>`, **17 nodes**, active | n8n Cloud, project **Main** | live |
-| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.6-net** | NIM (hosted) | 9.8–12.5 s per tap |
+| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.6-net** | NIM (hosted) | 9.8-12.5 s per tap |
 | Log | Google Sheet `Donations` | Google | live |
 | Photo + record store | Vercel Blob, **private** store `<blob-store>` | Vercel | live |
 | Export | `/api/export` → CSV (`?format=json`, `?since=YYYY-MM-DD`) | Vercel | live |
@@ -38,7 +38,7 @@ Everything below is reachable from any machine with this repo and the credential
 | Relay behaviour, CSV export, timeouts | edit `app/`, `vercel --prod` | previous deployment is one click away in the Vercel dashboard |
 | Swap the vision provider | create an n8n credential, point the vision node at it | one credential change |
 | Farmbrite product map | re-run the fetch in `scripts/farmbrite-setup.py` | read-only unless `--create` |
-| **The iPad script itself** | see §3 — iCloud Drive | file edit, no visit |
+| **The iPad script itself** | see §3, iCloud Drive | file edit, no visit |
 | Check health from anywhere | `python3 scripts/vision-regression-test.py --e2e` | read-only probe |
 | Read what happened | `/api/export`, the Google Sheet, n8n execution log | read-only |
 
@@ -67,11 +67,11 @@ So iPad-side fixes ship as a file edit. Regenerate with
 `python3 scripts/make-ipad-script.py` and copy the result into that folder.
 
 **Caveat:** the generated build contains the camera password. It is gitignored and must
-move by AirDrop or iCloud only — never email or chat.
+move by AirDrop or iCloud only, never email or chat.
 
 ---
 
-## 4. On confidence — why it is not shown to anyone
+## 4. On confidence: why it is not shown to anyone
 
 The vision model emits a `confidence` number. **It is uncalibrated and currently
 carries almost no information.**
@@ -80,7 +80,7 @@ carries almost no information.**
   things it scores 0.9 actually land within 10%.
 - It comes from the same pass that produced the weight, so its errors are correlated:
   a confidently wrong estimate arrives with confident confidence.
-- **Measured:** across the first 10 real records it took exactly **two** values —
+- Measured: across the first 10 real records it took exactly **two** values:
   0.85 and 0.95 (spread 0.1). It does not discriminate between good and bad readings.
 
 It is therefore removed from every human-facing surface (iPad screen, CSV, Google
@@ -93,14 +93,14 @@ can test whether confidence correlates with actual error. If it does, it earns a
 
 ---
 
-## 5. Accuracy — the honest position
+## 5. Accuracy: current position
 
 The weights are **not validated against a scale on this camera**. Structural work has
 been done to make them as good as possible without ground truth:
 
 - Container counting instead of pile-volume guessing.
 - Tare removed (it double-subtracted).
-- `temperature: 0` and a deterministic weight path — same image gives the same number
+- `temperature: 0` and a deterministic weight path; same image gives the same number
   (measured 60/60/60 lb across three runs).
 - A plausibility guard flags anything over 2000 lb from a 6×6 ft zone.
 
@@ -110,7 +110,7 @@ poundage. `docs/AUDIT-PREHANDOFF.md` §B4 tracks this.
 
 ---
 
-## 6. Scheduled decay — things that will break on their own
+## 6. Scheduled decay: things that will break on their own
 
 | Item | Symptom when it lapses | Fix |
 |---|---|---|
@@ -121,7 +121,7 @@ poundage. `docs/AUDIT-PREHANDOFF.md` §B4 tracks this.
 | Vercel Blob free tier (~1 GB ≈ 4,000 photos) | archiving stops, `archive_error` set; taps unaffected | prune old photos or upgrade |
 | n8n Cloud monthly execution cap | **all taps fail** | verify the plan's ceiling against volume |
 
-Nothing currently alerts on any of these — that is the largest sustainability gap and
+Nothing currently alerts on any of these; that is the largest sustainability gap and
 is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 
 ---
@@ -130,11 +130,11 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 
 - **Scriptable has no "Run with Parameter" menu item.** Modes are chosen by the in-app
   menu (`config.runsInApp`) or the URL scheme `scriptable:///run/Aperture?parameter=…`,
-  which arrives in `args.queryParameters` — NOT `shortcutParameter`.
+  which arrives in `args.queryParameters`, NOT `shortcutParameter`.
 - **The volunteer shortcut MUST pass the text `log` as its parameter.** With no
   parameter, `config.runsInApp` is true when launched via Shortcuts with Run In App
   ON, so the script shows the OPERATOR menu instead of logging. `log` is not a special
-  mode — it is simply non-empty, which skips the menu and falls through to the
+  mode; it is simply non-empty, which skips the menu and falls through to the
   donation path.
 - **Home Screen icon: use the Shortcuts app**, not Scriptable's "Add to Home Screen".
   The latter produces a `data:` page that WebKit refuses to redirect from in a normal
@@ -144,7 +144,7 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
   JavaScript and only fails on-device.
 - **`present()` resolves when the user dismisses the view.** Awaiting it before doing
   work hangs the script on a blank screen.
-- **`Request.timeoutInterval` is not reliably honoured** — a 20 s interval sat past
+- **`Request.timeoutInterval` is not reliably honoured.** A 20 s interval sat past
   60 s. Race every network call against a hard `Timer`.
 - Verify any change with `bash scripts/check-ipad-script.sh`; `node --check` alone
   passes files whose functions have been deleted.
@@ -155,7 +155,7 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
   **Users → <user> → Settings → Allow API Access**.
 - `qty` and `price` on an order item **must be strings**. Numbers return
   `500 "Invalid Order Item"`.
-- An order with **no items is accepted silently** — an unmatched product must never
+- An order with **no items is accepted silently**; an unmatched product must never
   fall through to an empty order.
 - **`GET /orders` excludes drafts.** A just-created draft was absent from all 5 pages
   while being retrievable by id. Use **`?status=Draft`** to list them. This is why the

@@ -1,8 +1,8 @@
-# Aperture — iPad as the on-tap camera bridge
+# Aperture: iPad as the on-tap camera bridge
 
 > State: live · Optionality: high · Open to Change: yes. Goal: keep the **mounted
 > Hikvision** as the imaging device (honors the installed board + camera + injector
-> + wall run) with **no new hardware and no Mac** — the on-site iPad pulls the
+> + wall run) with **no new hardware and no Mac**: the on-site iPad pulls the
 > frame itself at the moment of the tap.
 
 ## Why this is the right unlock
@@ -32,34 +32,34 @@ volunteer taps icon (Scriptable/Shortcut, foreground)
 
 No Mac. No LAN box. No Hik-Connect. The mounted camera stays the imaging device.
 
-## Auth — verified
+## Auth: verified
 
 Hikvision ISAPI uses **HTTP Digest** (realm `IP Camera(<device-serial-short>)`). The digest
 response construction in `aperture-pull.js` is **verified against the RFC 2617
 test vector** (`node` test: MD5 primitives + full `6629fae4…` response + the
 `IP Camera(<device-serial-short>)` realm parse all pass). If the camera is also configured to
 allow **Basic** auth (Hikvision default is often `digest/basic`), a pure Apple
-Shortcut works too — but the Scriptable digest path needs **no camera change**.
+Shortcut works too, but the Scriptable digest path needs **no camera change**.
 
-## ⭐ Follow `ONSITE-CARD.md` on site
+## Follow `ONSITE-CARD.md` on site
 
 `ONSITE-CARD.md` is the 4-step card to actually use on site: nothing to type, a
 one-tap self-test that proves every hop, and a one-action fix list. The detail
 below is background.
 
 **Before leaving:** `python3 scripts/make-ipad-script.py` writes a pre-configured
-`Aperture.local.js` (gitignored — it holds the camera password). AirDrop it to the
+`Aperture.local.js` (gitignored; it holds the camera password). AirDrop it to the
 iPad. That removes every settings prompt from the on-site procedure.
 
 ## Backend status: LIVE and verified (2026-08-02)
 
 Vercel prod relay → n8n (17 nodes, active) → NVIDIA NIM
 `nvidia/nemotron-nano-12b-v2-vl`, prompt v0.6-net → Google Sheet + Farmbrite draft
-order. A real POST returns 200 in 9.8–12.5 s and writes a row. Both regression controls pass:
+order. A real POST returns 200 in 9.8-12.5 s and writes a row. Both regression controls pass:
 `python3 scripts/vision-regression-test.py --e2e`. The **only** hop not yet exercised
-is the iPad reaching the camera over the Cul2vate LAN — that is what the self-test checks.
+is the iPad reaching the camera over the Cul2vate LAN; that is what the self-test checks.
 
-## On-site install (~10 min, needs the iPad on Cul2vate WiFi) — background detail
+## On-site install (~10 min, needs the iPad on Cul2vate WiFi): background detail
 
 1. **Install Scriptable** (free, App Store).
 2. In Scriptable: **+** → paste the contents of `camera-access/ipad/aperture-pull.js`
@@ -74,15 +74,15 @@ is the iPad reaching the camera over the Cul2vate LAN — that is what the self-
    - Relay URL: `https://<vercel-app-host>/api/donate`
    - Location label: `Cul2vate, Ellington Ag Center`
    To re-run setup later: pass the argument `setup`, or delete the keys.
-4. **Test tap:** put an item in the taped zone → run the script → confirm it
+4. Test tap: put an item in the taped zone → run the script → confirm it
    shows `X.X lbs` + item. (Needs the n8n + relay companion changes below live.)
-5. **Home-screen icon (make it "the app"):** either
+5. Home-screen icon (make it "the app"): either
    - Scriptable → script → **Add to Home Screen**, or
    - build a one-action **Apple Shortcut** ("Run Scriptable → Aperture"),
      add to Home Screen with a custom icon that matches the current PWA icon,
      and **Guided Access / Single-App Mode** so volunteers can't exit.
 
-## Companion changes (server-side) — ALREADY DONE
+## Companion changes (server-side): ALREADY DONE
 
 Applied and deployed 2026-07-28 by `scripts/rewire-n8n-ipad-nim.py` (backs up →
 verifies → PUTs → reads back; `--restore <backup>` rolls back):
@@ -101,12 +101,12 @@ verifies → PUTs → reads back; `--restore <backup>` rolls back):
 
 If on-site testing shows Scriptable can't reach the camera over HTTP on this
 network (ATS/proxy edge cases) **and** the camera won't allow Basic auth, drop a
-pre-flashed **$40–75 mini-PC / Pi** on the LAN running `bridge/mac_bridge.py`
+pre-flashed **$40-75 mini-PC / Pi** on the LAN running `bridge/mac_bridge.py`
 (`camera-access/README.md` Option A). Same pipeline, box does the pull instead
 of the iPad. This is the only path that needs hardware.
 
 ## Files
 
-- `aperture-pull.js` — the Scriptable script (digest pull → POST → result UI).
+- `aperture-pull.js`: the Scriptable script (digest pull → POST → result UI).
   Contains no secrets; creds live in the iOS Keychain (set on first run) and in
   `SECRETS.local.md` for the installer.

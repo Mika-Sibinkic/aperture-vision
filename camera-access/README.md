@@ -1,4 +1,4 @@
-# Camera Access — 4 Options
+# Camera access: 4 options
 
 n8n Cloud runs off-site. The Hikvision camera lives on Cul2vate's LAN. One of
 the four options below has to bridge them. Pick **during** the site visit once
@@ -6,7 +6,7 @@ you see what's already at Cul2vate (router model, always-on PC, etc.).
 
 ---
 
-## Option A — Cloudflare Tunnel on an existing Cul2vate device  ⭐ RECOMMENDED
+## Option A: Cloudflare Tunnel on an existing Cul2vate device (RECOMMENDED)
 
 **When:** Cul2vate has any always-on device on their network (old PC, Mac mini,
 an existing Raspberry Pi, or even the WiFi extender if it supports it).
@@ -32,7 +32,7 @@ tunnel UUID + credentials-file path + origin URL (the camera's local IP), then
 on the always-on device at Cul2vate:
 
 ```bash
-# Install cloudflared on the device (macOS, Linux, Windows, Docker — any)
+# Install cloudflared on the device (macOS, Linux, Windows, Docker, any)
 # Copy the tunnel credentials JSON + the config.yml onto it.
 cloudflared tunnel --config ~/.cloudflared/config.yml run aperture-cul2vate
 ```
@@ -47,7 +47,7 @@ Digest auth credentials sit in the n8n HTTP Request node.
 
 ---
 
-## Option B — Hik-Connect cloud + ISAPI proxy
+## Option B: Hik-Connect cloud + ISAPI proxy
 
 **When:** no always-on device; camera has internet; the client contact has admin on the
 Hikvision app/portal.
@@ -66,12 +66,12 @@ Steps:
 
 ---
 
-## Option C — Camera-initiated HTTP push
+## Option C: Camera-initiated HTTP push
 
 **When:** you want zero inbound exposure.
 
 **How:** configure the Hikvision to POST a snapshot to an n8n webhook when an
-alarm fires. The alarm trigger is the iPad button — but the iPad can't reach
+alarm fires. The alarm trigger is the iPad button, but the iPad can't reach
 the camera directly without a tunnel either… so this only works in combination
 with A or D.
 
@@ -83,7 +83,7 @@ n8n webhook URL.
 
 ---
 
-## Option D — Self-host n8n on the same LAN as the camera
+## Option D: Self-host n8n on the same LAN as the camera
 
 **When:** you decide the on-site device should run n8n itself (not just a
 tunnel). This contradicts the "no Pi" pivot, but it IS the simplest to debug

@@ -1,4 +1,4 @@
-# n8n Setup — Aperture
+# n8n setup: Aperture
 
 The workflow is `aperture-workflow.json`. Import it, then fill in the slots.
 
@@ -17,7 +17,7 @@ references these env vars via `{{ $env.NAME }}`:
 | Variable | Purpose | Where to get it |
 |---|---|---|
 | `APERTURE_SHARED_TOKEN` | Must match the value in Vercel env. Rejects unauthenticated callers. | `openssl rand -hex 32` |
-| `HIKVISION_CAMERA_URL` | HTTPS URL that returns a JPEG snapshot from the camera. | See `../camera-access/README.md` — pick an option, paste the resulting URL here. |
+| `HIKVISION_CAMERA_URL` | HTTPS URL that returns a JPEG snapshot from the camera. | See `../camera-access/README.md`; pick an option, paste the resulting URL here. |
 | `FARMBRITE_API_BASE` | `https://api.farmbrite.com/v1` (confirmed via https://developers.farmbrite.com/docs/). Leave blank to skip Farmbrite writes. | Official docs |
 | `FARMBRITE_INVENTORY_TYPE_ID` | ID of the inventory_type to append donations to. Auto-created as "Aperture Donations" by the probe script. | `./scripts/discover-farmbrite-endpoint.sh` |
 | `FARMBRITE_LOCATION_ID` | ID of the Farmbrite location (warehouse/farm) to credit. | Same script lists existing locations |
@@ -31,12 +31,12 @@ Create three credentials and wire them into the matching nodes:
    - User/pass set during first-boot of the camera (keep these in 1Password).
 2. **OpenAI API**
    - API key from `platform.openai.com`. Model `gpt-4o` in the Vision node.
-   - Swap to Anthropic Claude by changing the node — see `prompts/weight-estimation.md`.
-3. **Farmbrite API Key (HTTP Header Auth)** — *optional at first-run*
+   - Swap to Anthropic Claude by changing the node; see `prompts/weight-estimation.md`.
+3. **Farmbrite API Key (HTTP Header Auth)**, *optional at first-run*
    - If you don't have the key yet: skip this credential entirely AND leave
      the `FARMBRITE_API_*` env vars blank. The workflow detects the missing
      config, skips the Farmbrite write, and still returns weight + item type
-     to the iPad. Every execution is preserved in n8n execution history —
+     to the iPad. Every execution is preserved in n8n execution history;
      backfill to Farmbrite once the key is wired.
    - Header name: confirm via `./scripts/discover-farmbrite-endpoint.sh`.
      Typically `Authorization: Bearer <key>` or `X-Api-Key: <key>`.

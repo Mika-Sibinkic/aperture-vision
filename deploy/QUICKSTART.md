@@ -1,4 +1,4 @@
-# Aperture — appliance quickstart
+# Aperture: appliance quickstart
 
 5-step deploy for a fresh on-prem host. This is the plug-and-play
 positioning: drop the repo, fill 5 secrets, `docker compose up`.
@@ -12,7 +12,7 @@ The compose pattern below is the static / Cul2vate-grade version.
 - Docker 20.10+ with the `compose` plugin
 - A Hikvision (or compatible Hik-Connect) IP camera bound to a Hik-Connect
   account, OR a directly-RTSP-reachable camera (then the bridge gets
-  replaced with an RTSP grabber — out of scope for this quickstart)
+  replaced with an RTSP grabber; out of scope for this quickstart)
 - Outbound HTTPS reachability for OpenAI vision (or local-inference variant)
 
 ## 5 steps
@@ -73,7 +73,7 @@ docker compose -f deploy/docker-compose.yml run --rm aperture-demo \
   host port your network policy permits (default `8002:8002`).
 - For internet-facing exposure: front with a Cloudflare Tunnel or a
   reverse-proxy that adds mTLS. **Do not expose `:8002` publicly without
-  a proxy** — the bridge token is a bearer secret, not a per-request
+  a proxy**; the bridge token is a bearer secret, not a per-request
   authenticator.
 - For air-gapped / EnterpriseCo-style deployment: replace the OpenAI-vision worker
   with the on-prem Jetson inference service; no internet egress required.

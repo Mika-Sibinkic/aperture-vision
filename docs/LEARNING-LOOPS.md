@@ -1,4 +1,4 @@
-# Aperture — Learning Loops Architecture
+# Aperture: learning loops architecture
 
 The system is designed so every real donation yields training signal that
 tightens future predictions. Each component has its own RL loop, with
@@ -9,17 +9,17 @@ overreaction.
 
 ```
  ┌──────────────────────────────────────────────────────────────────┐
- │ TIER 3 — meta / pipeline                                         │
+ │ TIER 3 - meta / pipeline                                         │
  │   prompt A/B tests, model selection, confidence calibration      │
  │   (manual for v1, automated in v2+)                              │
  └──────────────────────────────────────────────────────────────────┘
  ┌──────────────────────────────────────────────────────────────────┐
- │ TIER 2 — per-class learners (this doc)                           │
+ │ TIER 2 - per-class learners (this doc)                           │
  │   density_learner · bias_learner · classifier_learner            │
  │   ensemble_weights                                               │
  └──────────────────────────────────────────────────────────────────┘
  ┌──────────────────────────────────────────────────────────────────┐
- │ TIER 1 — deterministic pre-processors                            │
+ │ TIER 1 - deterministic pre-processors                            │
  │   scale_ocr (ground truth)   charuco_preprocessor (v1.1)         │
  │   container tare lookup                                          │
  └──────────────────────────────────────────────────────────────────┘
@@ -58,12 +58,12 @@ learned_density = Σ(density_i · age_weight_i) / Σ(age_weight_i)
 - Fallback to static baseline when n_samples < 5
 - Per-cycle delta clamped to ±5% (one bad reading can't shift the world)
 - Sanity check: reject if learned drifts > 30% from baseline (flags for
-  human review — probably an OCR error)
+  human review; probably an OCR error)
 
 ### Bias multiplier learner (`bias_learner.py`)
 
 **What it learns:** per item_type, the systematic ratio
-`true_weight / predicted_weight` — catches model biases that density
+`true_weight / predicted_weight`; catches model biases that density
 alone can't explain (e.g., model consistently overestimates volume for
 stacked items).
 
@@ -71,7 +71,7 @@ stacked items).
 
 **Safeguards:**
 - Fallback to 1.0 when n_samples < 3
-- Absolute clamp [0.80, 1.25] — never amplify beyond ±25%
+- Absolute clamp [0.80, 1.25]; never amplify beyond ±25%
 - Per-cycle delta clamp ±5%
 
 ### Classifier reference sets (`classifier_learner.py`)
@@ -93,7 +93,7 @@ systematic misclassifications.
   the correct label was X…"
 
 **Safeguards:**
-- Keep_correct_examples=false — only teach from mistakes
+- Keep_correct_examples=false; only teach from mistakes
 - Dropped when too old OR when better examples arrive
 
 ### Ensemble weights (`ensemble_weights.py`)
@@ -155,13 +155,13 @@ percentage points to each tier.
 
 ## Anti-patterns that can never happen in this system
 
-1. **Model learning from its own predictions** — safeguard rejects any
+1. Model learning from its own predictions: safeguard rejects any
    ground-truth source named `model_prediction` or `model_self_label`.
-2. **One bad day wrecks the table** — per-cycle delta clamps bound any
+2. One bad day wrecks the table: per-cycle delta clamps bound any
    parameter change to ≤5%.
-3. **Drift past physical plausibility** — sanity check rejects learned
+3. Drift past physical plausibility: sanity check rejects learned
    values that deviate > 30% from known physical baselines.
-4. **Stale classes taking over** — 90-day age limit on reference
+4. Stale classes taking over: 90-day age limit on reference
    examples + 30-day EMA half-life on densities.
-5. **Silent corruption** — every rejected update is logged as a
+5. Silent corruption: every rejected update is logged as a
    `SafeguardViolation` and surfaced in the cycle summary.
