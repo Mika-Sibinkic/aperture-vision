@@ -44,13 +44,18 @@ class Prediction:
 
 def load_system_prompt() -> str:
     text = PROMPT_PATH.read_text()
-    marker = "## System prompt"
-    i = text.find(marker)
+    # The prompt file has carried the header as "## System prompt" (v0.1–v0.3)
+    # and "## SYSTEM PROMPT" (v0.4+); match either, case-insensitively.
+    marker = "## system prompt"
+    lower = text.lower()
+    i = lower.find(marker)
     if i == -1:
         raise RuntimeError(f"missing '{marker}' header in {PROMPT_PATH}")
-    # Cut off "## User prompt template" and below so we don't leak template scaffolding.
-    end = text.find("## User prompt template", i)
-    return text[i: end if end != -1 else None].strip()
+    # Cut off the end marker / template scaffolding so nothing extra leaks.
+    ends = [e for e in (lower.find("## end system prompt", i + len(marker)),
+                        lower.find("## user prompt template", i + len(marker))) if e != -1]
+    end = min(ends) if ends else None
+    return text[i:end].strip()
 
 
 def prompt_fingerprint(system: str) -> str:
