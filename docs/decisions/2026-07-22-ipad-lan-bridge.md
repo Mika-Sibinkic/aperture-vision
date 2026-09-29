@@ -9,25 +9,25 @@ alternatives_considered:
   - name: iPad's own camera (volunteer photographs the donation)
     reject_reason: Abandons the installed board+camera+injector+wall run (large sunk cost) and changes the imaging device; Mika explicitly rejected shipping only the iPad camera.
   - name: Hik-Connect / EZVIZ cloud pull (pyezviz on the Dell)
-    reject_reason: VERIFIED DEAD for this camera — pyezviz/pyezvizapi see an empty device list; hikconnect lib has no capture method.
+    reject_reason: VERIFIED DEAD for this camera; pyezviz/pyezvizapi see an empty device list; hikconnect lib has no capture method.
   - name: Hik-Partner Pro OpenAPI (cloud capture-by-serial)
     reject_reason: Official + no hardware, but blocked on partner OpenAPI AK/SK credential approval (~days). Pursue in parallel as the eventual hands-off cloud path; not a "now".
   - name: Keep Mac bridge on the Cul2vate LAN
     reject_reason: Dies whenever the Mac leaves/sleeps (the original 2026-04-17 failure). Not durable.
 corroborating_signals:
-  - RFC 2617 HTTP Digest — script response verified against the canonical test vector (node test, 2026-07-22)
+  - RFC 2617 HTTP Digest; script response verified against the canonical test vector (node test, 2026-07-22)
   - docs/methods/camera-connectivity.md (Hik-Connect cloud-pull proven dead; ISAPI-on-LAN is the only method that ever pulled a frame)
-  - iOS background-execution limits (apps suspended; no persistent inbound server) — hence tap-time foreground pull, not a server
+  - iOS background-execution limits (apps suspended; no persistent inbound server), hence tap-time foreground pull, not a server
   - Existing working pipeline shape (2026-04-17 demo): iPad tap -> relay -> n8n -> frame -> vision -> Sheet
 confidence:
   primary_claim: LIKELY        # digest auth math VERIFIED; on-device Scriptable HTTP-to-LAN + Keychain unverified until on-site
-  cost_estimate: VERIFIED      # $0 — uses hardware already installed + a free app
+  cost_estimate: VERIFIED      # $0, uses hardware already installed + a free app
 verification_probe: |
   On the Cul2vate LAN with the iPad: run camera-access/ipad/aperture-pull.js in
   Scriptable. Expect a 401->digest->200 JPEG from <camera-ip>, a POST to
   /api/donate, and a weight+item back. Off-LAN reproduction of the auth math:
   `node -e` require the script and check md5/buildDigestAuth vs the RFC vector
-  (6629fae49393a05397450978507c4ef1) — passes.
+  (6629fae49393a05397450978507c4ef1); passes.
 rollback:
   commit_sha: bd519cf
   steps:
@@ -63,5 +63,5 @@ no LAN box, no Hik-Connect cloud. The digest client is verified against RFC 2617
   (can't be done remotely). Credentials live in the iOS Keychain per device.
 - Open risk (drops confidence to LIKELY until an on-site tap): Scriptable
   reaching the camera over plain HTTP on this network, and Keychain/UITable
-  behavior — all standard, but unverified on this exact device/network. Fallback
+  behavior; all standard, but unverified on this exact device/network. Fallback
   is the low-cost LAN box; the pipeline (relay + n8n + NIM) is identical either way.

@@ -1,4 +1,4 @@
-# Aperture v2 — Determinism Maximization Agenda
+# Aperture v2: determinism maximization agenda
 
 The v1 architecture (single gpt-4o call + lookup tables + post-hoc bias) is
 shippable but leaves accuracy on the table. v2 redesigns the pipeline around
@@ -12,7 +12,7 @@ two principles:
 
 ## Items
 
-### 1. ChArUco OpenCV preprocessor — FOUNDATIONAL
+### 1. ChArUco OpenCV preprocessor (FOUNDATIONAL)
 
 **File:** `bridge/charuco_preprocessor.py` (runs on Dell G7 inside the bridge
 service before returning the snapshot to n8n).
@@ -41,7 +41,7 @@ Estimated residual reduction: 8-15 percentage points.
 
 ---
 
-### 2. Specialist ensemble — REPLACES the single vision call
+### 2. Specialist ensemble (REPLACES the single vision call)
 
 **Pipeline (replaces current `Vision: weight estimate` node):**
 
@@ -50,7 +50,7 @@ Estimated residual reduction: 8-15 percentage points.
 | 1a | Container classifier | Crop, geometry | `container_type` enum | Llama 3.2 11B Vision (NIM, free) |
 | 1b | Food classifier | Crop | `food_type` enum + `confidence` | gpt-4o-mini |
 | 1c | Prior-image retrieval | Crop embedding | `nearest_prior_id`, `similarity` | OpenAI text-embedding-3-large of CLIP features (or just CLIP cosine) |
-| 2 | Volume estimator | Crop, geometry, food_type, container_type | `volume_cu_in`, `unit_count`, `avg_unit_size_cu_in`, `pct_container_fill` | gpt-4o (the heavy hitter — only invoked once) |
+| 2 | Volume estimator | Crop, geometry, food_type, container_type | `volume_cu_in`, `unit_count`, `avg_unit_size_cu_in`, `pct_container_fill` | gpt-4o (the heavy hitter, only invoked once) |
 | 3 | Differential comparator | This crop, prior crop | `pct_fill_delta`, `unit_count_delta`, `unit_size_delta_pct` | gpt-4o-mini |
 | 4 | Determinism engine | All above + learned_density + tare lookup + bias table | `weight_lbs`, `confidence_final`, `agreement_score` | Pure code, no model |
 
@@ -103,13 +103,13 @@ contributes `true_weight / measured_volume` to the per-class density mean.
 After 5+ samples in a class, the learned density REPLACES the prompt's
 static range. Below 5 samples, fall back to lookup with reduced confidence.
 
-**Bonus:** track density per supplier (when known) — eventually we can
+**Bonus:** track density per supplier (when known); eventually we can
 auto-detect that "Sysco produce comes 8% heavier than ALDI produce" without
 anyone telling us.
 
 **Effort:** ~4 hours (training loop changes + density-fetch in workflow).
 
-**Accuracy gain:** depends on regional bias magnitude — estimated 3-7 points.
+**Accuracy gain:** depends on regional bias magnitude; estimated 3-7 points.
 
 ---
 
@@ -146,7 +146,7 @@ Effort: ~2 hours (Vercel cron job).
 ### 5. Image storage layer (required for 1c + 3)
 
 **Where:** Vercel Blob (1GB free tier, $0.15/GB after) or Cloudflare R2
-(10GB free tier — better deal).
+(10GB free tier, better deal).
 
 **What gets stored:** every snapshot, indexed by (timestamp, item_type,
 container_type, weight_lbs_final). Retention: 90 days. After 90 days,
@@ -165,14 +165,14 @@ combination + delete the rest.
 | Phase | What ships | When |
 |---|---|---|
 | v1 (now) | Single gpt-4o call + static lookup + post-hoc bias multiplier | Tonight |
-| v1.1 | ChArUco OpenCV preprocessor (Item 1) | Within 1 week — single biggest accuracy win, low risk |
-| v1.2 | Image storage + scale OCR ground truth (5 + 4a) | Week 2 — unlocks the residual loop |
-| v2.0 | Full specialist ensemble (Item 2) | Week 3-4 — once we have ground truth flowing to validate |
-| v2.1 | Learned densities (Item 3) | Week 5+ — needs ~14 days of v1.2 ground-truth data first |
+| v1.1 | ChArUco OpenCV preprocessor (Item 1) | Within 1 week; single biggest accuracy win, low risk |
+| v1.2 | Image storage + scale OCR ground truth (5 + 4a) | Week 2; unlocks the residual loop |
+| v2.0 | Full specialist ensemble (Item 2) | Week 3-4; once we have ground truth flowing to validate |
+| v2.1 | Learned densities (Item 3) | Week 5+; needs ~14 days of v1.2 ground-truth data first |
 
 **Why this order:**
 - ChArUco fix needs zero ground truth and removes the biggest error source first
-- Ensemble is meaningless without ground truth to compare against — would just be more guesses averaged
+- Ensemble is meaningless without ground truth to compare against; it would just be more guesses averaged
 - Learned density is meaningless without enough ground truth samples per class
 
 ## Estimated final accuracy (after v2.1)

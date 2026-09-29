@@ -47,7 +47,7 @@ superseded_by:
 ## Context
 
 Mika asked what should host Aperture always-on for production: the Dell G7, a VPS,
-or something else. Every prior outage at Cul2vate came from a self-managed piece —
+or something else. Every prior outage at Cul2vate came from a self-managed piece:
 the Mac bridge died when the Mac left the site, and the cloudflared quick tunnels
 went NXDOMAIN. The Dell was in the plan only because the camera needed a relay.
 
@@ -73,12 +73,12 @@ can be off when someone walks up to donate.
 
 ## Consequences
 
-- **Easier:** there is no server to be down. Recovery from a site power cut is "tap it
+- Easier: there is no server to be down. Recovery from a site power cut is "tap it
   again". The Dell stays dedicated to NSOS and is never a Cul2vate dependency.
-- **Harder / committed to:** capture requires the iPad to be present and on the Cul2vate
+- Harder / committed to: capture requires the iPad to be present and on the Cul2vate
   Wi-Fi, so unattended/hands-off capture is out until the low-cost LAN box is added. Vision
-  depends on NIM's free credits — if they run dry, swapping providers is a single n8n
+  depends on NIM's free credits; if they run dry, swapping providers is a single n8n
   credential edit (any OpenAI-compatible vision endpoint), not an architecture change.
-- **Watch:** n8n Cloud plan execution limits, and Google Sheets OAuth token refresh in
-  n8n — the two managed-service dependencies that can expire quietly. Both surface via
+- Watch: n8n Cloud plan execution limits, and Google Sheets OAuth token refresh in
+  n8n, the two managed-service dependencies that can expire quietly. Both surface via
   the `--e2e` regression probe above, runnable from anywhere without visiting the site.

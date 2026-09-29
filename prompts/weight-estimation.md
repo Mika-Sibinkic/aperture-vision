@@ -1,4 +1,4 @@
-# Aperture — Vision Prompt v0.8-scene
+# Aperture: Vision Prompt v0.8-scene
 
 Versioned. Change the version AND commit before editing prompt text.
 `scripts/rewire-n8n-ipad-nim.py` reads the **SYSTEM PROMPT** block below verbatim
@@ -8,7 +8,7 @@ prompt edits vs. model edits.
 
 ---
 
-## Why v0.4 exists — the parroting bug (found 2026-07-22)
+## Why v0.4 exists: the parroting bug (found 2026-07-22)
 
 v0.3 embedded a **filled-in example JSON** in the schema block (`"weight_lbs": 48.4`,
 `"confidence": 0.82`, `"pixels_per_inch": 2.3`, `"estimated_volume_cu_in": 1728`).
@@ -16,7 +16,7 @@ v0.3 embedded a **filled-in example JSON** in the schema block (`"weight_lbs": 4
 Measured against the real empty-zone control frame (`demo/test-images/IMG_0739.JPG`,
 ground truth = 0.0 lb), `meta/llama-3.2-90b-vision-instruct` returned **those exact
 example numbers back** and labelled a bare dock `"cased water bottles"` at 48.4 lbs.
-[VERIFIED 2026-07-22] It was copying the example, not measuring the scene — and it
+[VERIFIED 2026-07-22] It was copying the example, not measuring the scene, and it
 looked completely confident doing it.
 
 **Fixes in v0.4:**
@@ -32,15 +32,15 @@ looked completely confident doing it.
 
 | Control | Image | Expected | v0.4 result |
 |---|---|---|---|
-| Negative | `IMG_0739.JPG` (real dock, empty zone, truth 0.0 lb) | empty / 0 lb | `item_type:"empty"`, `weight_lbs:0`, conf 0.9 ✅ |
-| Positive | real fruit/veg market stall photo (Wikimedia, CC) | goods + a computed weight | `item_type:"fruit"`, `milk-crate-standard`, 10 lb (8–12), conf 0.8 ✅ |
+| Negative | `IMG_0739.JPG` (real dock, empty zone, truth 0.0 lb) | empty / 0 lb | `item_type:"empty"`, `weight_lbs:0`, conf 0.9 |
+| Positive | real fruit/veg market stall photo (Wikimedia, CC) | goods + a computed weight | `item_type:"fruit"`, `milk-crate-standard`, 10 lb (8-12), conf 0.8 |
 
 Re-run both any time: `python3 scripts/vision-regression-test.py`.
 
 Model: `nvidia/nemotron-nano-12b-v2-vl` on NVIDIA NIM (see the model note below).
-`llama-3.2-11b-vision` was rejected — it returns narrative prose instead of JSON.
+`llama-3.2-11b-vision` was rejected; it returns narrative prose instead of JSON.
 
-## v0.5 — count containers instead of guessing at a pile
+## v0.5: count containers instead of guessing at a pile
 
 A single camera cannot see stack height, so estimating an amorphous pile's volume is
 the least reliable thing we ask for. Counting discrete containers is a task VLMs are
@@ -51,11 +51,11 @@ markedly better at, and it converts volume into arithmetic:
 `containers.json` carries per-container dimensions, which is what makes the volume
 arithmetic possible.
 
-## v0.8 — ground the model in the real scene (2026-08-02)
+## v0.8: ground the model in the real scene (2026-08-02)
 
 Having seen actual frames, the prompt no longer describes the dock abstractly. It now
-names what is permanently in view — the wall-mounted checkerboard, the van, the
-boxes/buckets/chairs/cart around the edges — and states plainly that none of it is
+names what is permanently in view (the wall-mounted checkerboard, the van, the
+boxes/buckets/chairs/cart around the edges) and states plainly that none of it is
 ever the donation. Guessing is hardest when the model has to work out what is
 scenery; telling it removes that work.
 
@@ -64,15 +64,15 @@ Two further changes:
   is normally in colour; infrared/monochrome is the exception, not the default.
 - **The volunteer's typed item labels goods but cannot create them.** First draft of
   this rule was too weak: with "Kale" typed against the real EMPTY-zone frame the model
-  returned *50 lbs of Kale* [VERIFIED 2026-08-02]. That is the realistic failure —
+  returned *50 lbs of Kale* [VERIFIED 2026-08-02]. That is the realistic failure:
   someone types the item, then taps before the load is staged. The prompt now forces an
   explicit order: judge the image first with the description unread, stop if the zone is
   empty, and only then use the description to name what was already seen.
 
-## v0.7 — the empty-zone failure seen on the real camera (2026-08-02)
+## v0.7: the empty-zone failure seen on the real camera (2026-08-02)
 
 The first live capture from the mounted camera produced **"banana box, 50 lbs, 70%
-full"** on a **completely empty staging zone**. [VERIFIED — frame saved as
+full"** on a **completely empty staging zone**. [VERIFIED; frame saved as
 `demo/test-images/dock-empty-night-IR.jpg`]
 
 What the frame actually contained: bare concrete inside the tape; a box of onions, a
@@ -92,10 +92,10 @@ Three faults, all now addressed:
 The empty case is also promoted to "the MOST COMMON case - expect it", because a dock
 camera sees an empty zone far more often than a donation.
 
-## v0.6 — tare removed entirely (2026-08-02)
+## v0.6: tare removed entirely (2026-08-02)
 
 v0.5 contained a contradiction: the model was told to report **net food weight** and
-also that "tare is subtracted downstream" — which would subtract the containers twice.
+also that "tare is subtracted downstream", which would subtract the containers twice.
 
 Tare is now gone from the pipeline completely. The model reports food-only weight and
 **nothing is added or subtracted after it**. This removes a whole reasoning step, drops
@@ -103,10 +103,10 @@ the fuzzy keyword-matching container lookup (a nondeterminism source that could 
 the same photo to different containers on different runs), and makes the number the
 model produces the number that gets logged.
 
-`container_type` and `container_count` are still captured — they are useful signal for
-volume reasoning and for future training — but they no longer alter the weight.
+`container_type` and `container_count` are still captured; they are useful signal for
+volume reasoning and for future training, but they no longer alter the weight.
 
-Volunteers are NOT asked for a count — it is a visual cue the model reads. They only
+Volunteers are NOT asked for a count; it is a visual cue the model reads. They only
 type the item, which is the habit they already have.
 
 ---
@@ -258,5 +258,5 @@ The captured JPEG is attached as the vision input. That's the whole call.
 ## Hidden-weight eval mode
 
 If the context contains `eval_mode: true`, the model must not reference any known
-weight that may leak via metadata — the training loop strips weight metadata and
+weight that may leak via metadata; the training loop strips weight metadata and
 holds ground truth back for a pure prediction.

@@ -1,4 +1,4 @@
-# Hik-Connect Setup + Firmware Freeze — Camera Side
+# Hik-Connect setup + firmware freeze: camera side
 
 One-time setup at the camera. ~10 minutes on-site. After this, the camera is
 reachable from anywhere via Hikvision's free cloud relay (no port forwarding,
@@ -10,12 +10,12 @@ Do NOT reuse a personal account. Create one just for this camera.
 
 - Open https://www.hik-connect.com/ in a browser
 - Click **Register**
-- Use an email you control — recommended: `aperture@example.com` (or create
+- Use an email you control; recommended: `aperture@example.com` (or create
   a Gmail like `aperture-service@example.com` if the Cul2vate domain isn't
   ready for a new mailbox)
 - Choose a strong password (generate with `openssl rand -base64 24`)
 - Verify the email, complete registration
-- **Save credentials in 1Password** — this is now a production secret
+- Save credentials in 1Password; this is now a production secret
 
 ## 2. Enable Platform Access on the camera
 
@@ -26,18 +26,18 @@ With the VLC + socat + curl setup you used for the install (Mac bridging
 2. Set **Platform Access Mode** = `Hik-Connect`
 3. Set **Enable** ✓
 4. Set **Stream Encryption** ✓
-5. **Verification Code**: set a 6–12 char code (letters + numbers, no spaces).
-   Write it down — you'll need it next step. Treat as a secret.
+5. Verification Code: set a 6-12 char code (letters + numbers, no spaces).
+   Write it down; you'll need it next step. Treat as a secret.
 6. Click **Save**
 7. Refresh the page and confirm **Register Status** shows `Online`
-   (may take 30–60 sec after saving; refresh a few times)
+   (may take 30-60 sec after saving; refresh a few times)
 
 If Register Status stays `Offline`:
 - Cul2vate's Eero is probably fine (camera makes outbound HTTPS to
   dev.hik-connect.com:443), but re-check Network → Basic Settings → DNS
   is `8.8.8.8` (we set this during the static-IP migration)
 - If still failing, the camera needs a firmware that supports Hik-Connect.
-  All 2020+ firmware does. Check **System → Maintenance → Firmware Version** —
+  All 2020+ firmware does. Check **System → Maintenance → Firmware Version**;
   V5.5.0+ is fine.
 
 ## 3. Bind the camera to your Hik-Connect account
@@ -84,30 +84,30 @@ was running when the system last worked.
 
 ```
 Configuration → System → Maintenance → Upgrade & Maintenance
-  → Auto-upgrade:  ❌ OFF (should already be off by default)
+  → Auto-upgrade:  OFF (should already be off by default)
 ```
 
 Some firmware versions also have:
 ```
 Configuration → System → System Settings → Menu → "Check for update on login"
-  → ❌ OFF
+  → OFF
 ```
 
 ### 5c. Lock down the Hik-Connect device firmware channel
 
 On https://www.hik-connect.com → the camera → Settings → "Auto-Update":
 - Turn OFF if present. Hik-Connect does NOT push firmware without user
-  action, but the setting exists on some account tiers — disable to be safe.
+  action, but the setting exists on some account tiers; disable to be safe.
 
 ### 5d. Block firmware-related outbound if truly paranoid
 
-(OPTIONAL — don't do this for launch, only if you ever see firmware-related
+(OPTIONAL; don't do this for launch, only if you ever see firmware-related
 regressions.) On the Eero, block outbound traffic from the camera's MAC to:
 - `upgrade.hikvision.com`
 - `firmware.hik-connect.com`
 
 The camera will continue to work fine without these. Hik-Connect cloud relay
-uses `*.ezvizlife.com` and `*.hik-connect.com` — DO NOT block those.
+uses `*.ezvizlife.com` and `*.hik-connect.com`; DO NOT block those.
 
 ### 5e. Record the snapshot API fingerprint
 
@@ -126,7 +126,7 @@ The hash will of course change every time (scene differs), but the `file`
 output tells you the format. If a firmware update ever silently changes
 resolution, the JPEG header size changes and you'll notice.
 
-## 6. Regression check — can you fetch a snapshot without touching the LAN?
+## 6. Regression check: can you fetch a snapshot without touching the LAN?
 
 From a laptop on a DIFFERENT WiFi network (your phone's hotspot works), in
 Python:

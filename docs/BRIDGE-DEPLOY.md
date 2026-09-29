@@ -1,4 +1,4 @@
-# Aperture Bridge — Dell G7 Deployment
+# Aperture bridge: Dell G7 deployment
 
 The bridge is a small FastAPI service that runs 24/7 on the Dell G7. It
 authenticates to Hik-Connect on your behalf, pulls fresh JPEGs from the
@@ -7,7 +7,7 @@ HTTPS endpoint fronted by Cloudflare Tunnel.
 
 ## Prereqs on the Dell
 
-- Ubuntu/Debian (WSL2 on Windows is fine — we already do this for NSOS)
+- Ubuntu/Debian (WSL2 on Windows is fine; we already do this for NSOS)
 - `cloudflared` already installed and running (you have this for NSOS)
 - Python 3.10+ (WSL Ubuntu 24.04 has 3.12)
 - Outbound HTTPS to `*.ezvizlife.com` and `*.hik-connect.com` (no firewall
@@ -21,7 +21,7 @@ HTTPS endpoint fronted by Cloudflare Tunnel.
    cd ~/nsbf/Active\ Projects/Branch\ Cam\ Testing/aperture/bridge
    ```
 
-2. **Run the setup script** (it does everything — user, venv, systemd, env):
+2. **Run the setup script** (it does everything: user, venv, systemd, env):
    ```bash
    sudo bash setup-dell.sh
    ```
@@ -31,10 +31,10 @@ HTTPS endpoint fronted by Cloudflare Tunnel.
    sudo nano /etc/aperture-bridge.env
    ```
    Fill in:
-   - `EZVIZ_ACCOUNT` — email from Hik-Connect step 1
-   - `EZVIZ_PASSWORD` — password from Hik-Connect step 1
-   - `CAMERA_SERIAL` — 9-digit serial
-   - `BRIDGE_TOKEN` — generate with `openssl rand -hex 32`
+   - `EZVIZ_ACCOUNT`: email from Hik-Connect step 1
+   - `EZVIZ_PASSWORD`: password from Hik-Connect step 1
+   - `CAMERA_SERIAL`: 9-digit serial
+   - `BRIDGE_TOKEN`: generate with `openssl rand -hex 32`
 
    Re-run:
    ```bash
@@ -47,7 +47,7 @@ HTTPS endpoint fronted by Cloudflare Tunnel.
    journalctl -u aperture-bridge -n 50
    ```
 
-3. **Local smoke test**:
+3. Local smoke test:
    ```bash
    source /etc/aperture-bridge.env
    curl -s -H "Authorization: Bearer $BRIDGE_TOKEN" \
@@ -63,14 +63,14 @@ HTTPS endpoint fronted by Cloudflare Tunnel.
    sudo systemctl restart cloudflared
    ```
 
-5. **Remote smoke test** — from your Mac:
+5. Remote smoke test, from your Mac:
    ```bash
    curl -s -H "Authorization: Bearer $BRIDGE_TOKEN" \
      https://aperture-bridge.<your-domain>/snapshot -o /tmp/snap.jpg
    open /tmp/snap.jpg      # should show live dock view
    ```
 
-6. **Wire into n8n** — in the n8n Cloud UI, Settings → Variables:
+6. Wire into n8n, in the n8n Cloud UI, Settings → Variables:
    - `HIKVISION_CAMERA_URL` = `https://aperture-bridge.<your-domain>/snapshot`
    - `BRIDGE_TOKEN`         = same value as `/etc/aperture-bridge.env`
 
@@ -118,6 +118,6 @@ sudo bash setup-dell.sh         # re-runs idempotently, restarts service
 | 401 on `/snapshot` | Bearer mismatch | Compare `$BRIDGE_TOKEN` in n8n and `/etc/aperture-bridge.env` |
 | 503 "camera unreachable" | Hik-Connect offline | Check camera Platform Access Register Status; restart camera; check Cul2vate internet |
 | 503 "pyezviz error: login failed" | EZVIZ credentials changed | Log into hik-connect.com with the saved creds; if broken, reset password, update env, restart |
-| Service keeps restarting | Bad env file | `journalctl -u aperture-bridge -n 20` — missing var? |
-| Snapshots returning but 3+ minutes stale | pyezviz session expired but error was masked | `sudo systemctl restart aperture-bridge` (auto-recovery in code should handle this — file a bug if you see it twice) |
+| Service keeps restarting | Bad env file | `journalctl -u aperture-bridge -n 20`; missing var? |
+| Snapshots returning but 3+ minutes stale | pyezviz session expired but error was masked | `sudo systemctl restart aperture-bridge` (auto-recovery in code should handle this; file a bug if you see it twice) |
 | Snapshot returns but low resolution | Hik-Connect relay downsamples on low-bandwidth clients | Fix camera Video/Audio → Main Stream → resolution + bitrate if needed |
