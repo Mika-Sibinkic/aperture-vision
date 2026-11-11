@@ -7,6 +7,6 @@ JSON with an estimated weight, and the result is logged to a Google Sheet and Fa
 - Start with `README.md`, then `docs/OPERATIONS.md` for what is live.
 - Vision prompt versions live in `prompts/weight-estimation.md`; each version records the
   failure it fixes. Do not remove the anti-parroting or empty-zone rules.
-- The one unit test is `training-loop/test_hidden_weight.py`; run
-  `python -m pytest -q training-loop` before committing changes to the training loop.
+- Before committing, run the offline block in README's "Try it in a minute" (9 Python
+  tests, 24 web tests). CI runs the same steps.
 - Never commit credentials. `.env*` files other than `.env.example` are gitignored.

@@ -15,16 +15,22 @@ as a draft order in Farmbrite (the farm inventory system Cul2vate already uses),
 a private copy of the photo. If the reading is wrong, the undo button is on the same
 screen.
 
-## Try it in 5 minutes
+## Try it in a minute
 
-Everything here runs offline and costs nothing.
+Everything here runs offline and costs nothing. CI runs the same steps.
 
 ```bash
 bash demo/run_demo.sh --provider stub
-demo/.venv/bin/pip install -r training-loop/requirements.txt pytest
-demo/.venv/bin/python -m pytest -q training-loop
-npm ci && npm run build && npm run dev
+demo/.venv/bin/pip install -r training-loop/requirements.txt
+demo/.venv/bin/python -m pytest -q training-loop demo/test_charuco.py
+npm ci && npx tsc --noEmit && npm run build && npm test
+npm run dev
 ```
+
+I timed the first four lines from a fresh clone on my Mac (Python 3.14, Node 22). With
+empty npm and pip caches they took 55 s. With warm caches, three runs took 36, 36 and
+49 s. About half of each run is the demo installing OpenCV into its venv. You should see
+`9 passed` from pytest and `24 passed` from the web tests.
 
 The demo builds `demo/.venv`, looks for the printed ChArUco board in the two bundled
 dock frames, and writes `demo/output/accuracy-report.md`. On my Mac it found:
@@ -35,26 +41,25 @@ dock frames, and writes `demo/output/accuracy-report.md`. On my Mac it found:
 | dock-empty-night-IR.jpg | 0.00 | 0.00 |  |  | ✅ | 6.164 | poor | 0.00s |
 ```
 
-The stub provider always answers 0 lb, so the weight columns only prove the plumbing
-works. The daytime frame is a real failure: only 4 of the board's 40 markers are
-readable in it. `demo/README.md` has the details.
+The stub returns the manifest's true weight with up to 12% jitter. Both frames show an
+empty dock, so the weight columns read 0 and only prove the plumbing works. The daytime
+frame is a real failure: only 4 of the board's 40 markers are readable in it.
+`demo/README.md` has the details.
 
-The training-loop tests include one that proves the known weight never reaches the
-vision prompt. `npm run dev` serves
-the UI only, the legacy PWA on `localhost:3000`. A tap there returns
+The Python tests include one that proves the known weight never reaches the vision
+prompt. The web tests cover the relay routes: the device token, input checks, duplicate
+taps, undo and export. `npm run dev` serves the UI only, the legacy PWA on
+`localhost:3000`. A tap there returns
 `Server not configured: N8N_WEBHOOK_URL missing`, because the real path needs n8n, the
 iPad and the camera.
 
 ## What a tap returns
 
-```
-TODO-INTEGRATOR: paste one real response from
-`python3 scripts/vision-regression-test.py --e2e`, or one redacted row from
-`/api/export?format=json`. Do not invent values.
-```
-
-The relay passes through what the workflow's **Shape response** node builds:
-`weight_lbs`, `item_type`, `container_type`, `container_count`, `weight_lbs_low`,
+I have not pasted a live response here, because capturing one writes a donation to
+production. `python3 scripts/vision-regression-test.py --e2e` sends three control frames
+through the live relay, prints the item and weight for each, and voids them. Their Sheet
+rows stay: two say `REGRESSION TEST`, and the phantom control's says `Kale`. The relay passes through what the workflow's **Shape response** node
+builds. The fields include `weight_lbs`, `item_type`, `container_type`, `container_count`, `weight_lbs_low`,
 `weight_lbs_high`, `implausible_weight`, `prompt_version`, `model`,
 `farmbrite_order_id` and `notes`.
 

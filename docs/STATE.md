@@ -31,4 +31,4 @@
 4. OPENAI_API_KEY in business-framework/.env for real-vision demo runs
 
 ## Secrets
-All live values: `SECRETS.local.md` (gitignored); see AGENTS.md convention. Tokens formerly inline in checkpoint.md were redacted at migration; originals preserved in `checkpoint.local.md` and the pre-git tarball (`../aperture-pre-git-backup.tar.gz`).
+All live values: `SECRETS.local.md` (gitignored); see `CLAUDE.md`. Tokens formerly inline in checkpoint.md were redacted at migration; originals preserved in `checkpoint.local.md` and the pre-git tarball (`../aperture-pre-git-backup.tar.gz`).
