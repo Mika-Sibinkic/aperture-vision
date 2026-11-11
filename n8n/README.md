@@ -1,26 +1,19 @@
 # n8n workflow
 
-Import this one: `aperture-workflow-ipad-nim.json`. It is the live 17-node workflow.
-`scripts/rewire-n8n-ipad-nim.py` generates it. The script reads the live workflow over
+Import `aperture-workflow-ipad-nim.json`. It has 18 nodes: the 17-node live workflow
+plus one fix from 2026-11-11 that is not deployed yet. That fix adds **Farmbrite: has
+order?**, stops generic words like "potatoes" from matching a specific variety, skips
+November-May loads that have no Seasonal bucket, and returns `farmbrite_skipped_reason`.
+Until it is pushed, the live workflow has none of those.
+
+`scripts/rewire-n8n-ipad-nim.py` generates the file. It reads the live workflow over
 the n8n API, rewires it for the iPad and NVIDIA NIM, checks it, writes the redacted
-copy here, then PUTs it back (`--dry-run` stops before the PUT, `--restore <backup>`
-rolls back).
+copy here (name, nodes, connections and settings only), then PUTs it back
+(`--dry-run` stops before the PUT, `--restore <backup>` rolls back).
 
-The other six files are history. Scripts and old runbooks still name some of them, so
-they stay where they are. Every one of them fetches the camera frame through the
-camera bridge, which the iPad path no longer uses.
-
-| File | Nodes | How it differs |
-|---|---|---|
-| `aperture-workflow.json` | 19 | First build (April 2026): bridge fetch, OpenAI vision, optional bias and density fetches |
-| `aperture-workflow-starter.json` | 19 | Same nodes, named "STARTER-COMPATIBLE v1.1" |
-| `aperture-workflow-MERGED.json` | 19 | Same nodes, named "MERGED" |
-| `aperture-workflow-CLEAN.json` | 17 | First build without the two optional fetches |
-| `aperture-workflow-LIVE-snapshot.json` | 16 | Bridge-era live copy, no Farmbrite write |
-| `aperture-workflow-LIVE-v2.json` | 16 | Bridge-era live copy with a 401 response, no Farmbrite write |
-
-The legacy PWA in `app/page.tsx` posts no image, so it only works against one of these
-bridge-era workflows.
+The bridge-era workflows are in git history: `git log --all -- n8n/`. Every one of them
+fetched the frame through a camera bridge that no longer runs. The legacy PWA in
+`app/page.tsx` posts no image, so it only worked against those.
 
 ## Set it up
 
@@ -35,13 +28,12 @@ Use native n8n nodes and n8n credentials. Keys never go in the workflow JSON.
      **Vision: weight estimate**.
    - Google Sheets OAuth2, on **Append to Google Sheet**. Put your sheet ID in place
      of `<google-sheet-id>`. The tab is named `Donations`.
-   - `Farmbrite (Aperture)`: Header Auth, on **Farmbrite: log order**. Optional.
-4. Farmbrite is optional. Set `FARMBRITE_API_BASE`, `FARMBRITE_INVENTORY_TYPE_ID` and
-   `FARMBRITE_LOCATION_ID` in n8n variables to turn it on. With any of them blank,
-   **Guard: Farmbrite configured** skips the write and the tap still returns a
-   weight. `scripts/farmbrite-setup.py` finds the IDs. The product map in
-   **Build Farmbrite order** comes from `PRODUCT_MAP` in the rewire script. It is
-   Cul2vate's catalogue, so replace it with yours.
+   - `Farmbrite (Aperture)`: Header Auth, on **Farmbrite: log order**.
+4. Farmbrite runs on every tap with a positive weight. No n8n variable turns it off:
+   **Guard: Farmbrite configured** is disabled and nothing connects to it. To skip
+   Farmbrite, disable **Farmbrite: log order**. To use it, replace the `PRODUCTS` map in
+   **Build Farmbrite order** first. It holds Cul2vate's product IDs, and it comes from
+   `PRODUCT_MAP` in the rewire script.
 5. Paste the prompt. **Build vision request** holds the system prompt as a string.
    Its source is `prompts/weight-estimation.md`, between `## SYSTEM PROMPT` and
    `## END SYSTEM PROMPT`. The rewire script does this for you.
@@ -57,6 +49,6 @@ python3 scripts/vision-regression-test.py --e2e
 ```
 
 That goes through the live relay and writes real records, then voids each one through
-`/api/void`. Voiding deletes the Farmbrite draft and drops the record from the CSV
-export. The Sheet row stays, labeled as a regression test. Once
+`/api/void`. Voiding deletes the Farmbrite draft (when Vercel has `FARMBRITE_API_KEY`)
+and drops the record from the CSV export. The Sheet row stays, labeled as a regression test. Once
 `APERTURE_DEVICE_TOKEN` is set, export it before you run the probe.

@@ -20,7 +20,7 @@ Design rules (this is a live production workflow):
   * NO SECRETS  - asserts no nvapi-/bearer material is present in the outgoing JSON.
 
 Usage:
-    source "<business-framework>/.env"          # N8N_BASE_URL, N8N_API_KEY
+    source <your .env>          # holds N8N_BASE_URL and N8N_API_KEY
     python3 scripts/rewire-n8n-ipad-nim.py [--dry-run]
 
 Rollback:
@@ -640,10 +640,11 @@ def redacted_for_commit(wf: dict) -> str:
     The workflow carries APERTURE_SHARED_TOKEN inline (Verify Token node) and older
     versions carried BRIDGE_TOKEN. Committed n8n JSON must never contain them — see
     the secrets convention in CLAUDE.md. Backups keep the real values and are
-    gitignored, because a rollback needs them verbatim. pinData is dropped because it
-    holds a captured webhook request, including the caller's IP address.
+    gitignored, because a rollback needs them verbatim. Only the importable fields are
+    kept (put_body): pinData holds a captured webhook request with the caller's IP, and
+    activeVersion embeds a stale copy of the previous workflow.
     """
-    text = json.dumps({k: v for k, v in wf.items() if k != "pinData"}, indent=2)
+    text = json.dumps(put_body(wf), indent=2)
     return re.sub(r"\b[0-9a-f]{64}\b", "REDACTED-see-SECRETS.local.md", text)
 
 
