@@ -3,7 +3,6 @@ node_modules/
 .vercel/
 .venv/
 .bridge-venv/
-demo/.venv/
 __pycache__/
 *.pyc
 .DS_Store
@@ -13,7 +12,6 @@ __pycache__/
 N8N Bridge Token.rtf
 SECRETS.local.md
 checkpoint.local.md
-demo/output/
 * 2.*
 * 2
 .n8n-nim-credential-id

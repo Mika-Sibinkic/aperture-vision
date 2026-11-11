@@ -3,7 +3,7 @@
 Vision regression test — guards the two failures that silently produce
 confident, wrong weights.
 
-  NEGATIVE control  demo/test-images/dock-empty-night-IR.jpg — an ACTUAL frame from
+  NEGATIVE control  test-images/dock-empty-night-IR.jpg — an ACTUAL frame from
                     the mounted camera (2026-08-01 21:59, night infrared): empty
                     staging zone, cluttered dock around it, monochrome. Ground truth
                     0.0 lb. This is the exact frame on which v0.6 reported
@@ -43,14 +43,15 @@ REPO = Path(__file__).resolve().parent.parent
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
 
-def relay_url() -> str:
-    """Read RELAY from make-ipad-script.py, so a fork sets its Vercel URL in one place."""
+def ipad_setting(name: str) -> str:
+    """Read RELAY or LOCATION from make-ipad-script.py, so a fork sets each in one place."""
     src = (REPO / "scripts" / "make-ipad-script.py").read_text()
-    m = re.search(r'^RELAY\s*=\s*"([^"]+)"', src, re.M)
+    m = re.search(rf'^{name}\s*=\s*"([^"]+)"', src, re.M)
     return m.group(1) if m else ""
 
 
-RELAY_URL = relay_url()
+RELAY_URL = ipad_setting("RELAY")
+LOCATION = ipad_setting("LOCATION")
 VOID_URL = RELAY_URL.replace("/api/donate", "/api/void")
 
 
@@ -63,8 +64,8 @@ def production_model() -> str:
 
 
 MODEL = production_model()
-NEGATIVE = REPO / "demo" / "test-images" / "dock-empty-night-IR.jpg"   # REAL frame from the mounted camera, empty zone, night IR
-NEGATIVE_OLD = REPO / "demo" / "test-images" / "IMG_0739.JPG"
+NEGATIVE = REPO / "test-images" / "dock-empty-night-IR.jpg"   # REAL frame from the mounted camera, empty zone, night IR
+NEGATIVE_OLD = REPO / "test-images" / "IMG_0739.JPG"
 POSITIVE_TITLE = "File:Obstmarktstand Marburg Firmanei1.jpg"
 UA = {"User-Agent": "aperture-vision-regression/1.0"}
 PARROT_VALUES = {"weight_lbs": 48.4, "confidence": 0.82, "pixels_per_inch": 2.3,
@@ -118,7 +119,7 @@ def fetch_positive() -> Path | None:
 
 
 def ask_nim(image: bytes, key: str, desc: str = "—") -> dict:
-    context = (f"\n\nContext for THIS donation:\ndescription: {desc}\nlocation: Cul2vate, Ellington Ag Center\n"
+    context = (f"\n\nContext for THIS donation:\ndescription: {desc}\nlocation: {LOCATION}\n"
                "triggered_at: 2026-01-01T00:00:00Z\neval_mode: false\n\nReturn the JSON object now.")
     body = {
         "model": MODEL,
@@ -144,7 +145,7 @@ def ask_relay(image: bytes, label: str) -> dict:
     desc = "Kale" if "phantom" in label else f"REGRESSION TEST — {label}"
     donation_id = str(uuid.uuid4())   # ours, so the probe can void exactly what it logged
     body = json.dumps({"description": desc, "image_b64": base64.b64encode(image).decode(),
-                       "triggered_at": "2026-01-01T00:00:00Z", "location": "Cul2vate, Ellington Ag Center",
+                       "triggered_at": "2026-01-01T00:00:00Z", "location": LOCATION,
                        "donation_id": donation_id, "source": "aperture-regression"}).encode()
     req = urllib.request.Request(RELAY_URL, data=body, headers=relay_headers())
     try:

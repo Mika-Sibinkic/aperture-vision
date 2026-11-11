@@ -1,6 +1,0 @@
-opencv-contrib-python==4.13.0.92
-numpy>=1.26,<3.0
-python-dotenv>=1.0
-pyyaml>=6.0
-requests>=2.33.0
-pytest==9.2.0

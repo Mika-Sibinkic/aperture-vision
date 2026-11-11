@@ -8,5 +8,5 @@ JSON with an estimated weight, and the result is logged to a Google Sheet and Fa
 - Vision prompt versions live in `prompts/weight-estimation.md`; each version records the
   failure it fixes. Do not remove the anti-parroting or empty-zone rules.
 - Before committing, run the three lines in README's "Try it in a minute" (32 web tests
-  on 2026-11-11). CI runs them, `pytest demo` (2 tests) and `scripts/check-ipad-script.sh`.
+  on 2026-11-11). CI runs them and `scripts/check-ipad-script.sh`.
 - Never commit credentials. `.env*` files other than `.env.example` are gitignored.
