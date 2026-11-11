@@ -10,17 +10,20 @@ export const dynamic = "force-dynamic";
 // call surfaces as a real result rather than a client-side timeout.
 export const maxDuration = 120;
 
+// Fields checked below are typed unknown: the body is whatever the client sent.
 type IncomingBody = {
-  description?: string;
-  triggered_at?: string;
+  description?: unknown;
+  triggered_at?: unknown;
   location?: string;
   // Optional base64 JPEG captured on-device (iPad LAN pull of the mounted
   // Hikvision, or the iPad's own camera). When present, n8n uses this frame
   // instead of fetching from a bridge. Absent for the legacy PWA path.
   image_b64?: string;
   source?: string;
-  donation_id?: string;
+  donation_id?: unknown;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ArchiveResult = {
   url: string | null;
@@ -108,16 +111,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  const triggeredAt = body.triggered_at ?? new Date().toISOString();
+  // Re-serialised from the parsed Date, so the blob day prefix is always a real
+  // YYYY-MM-DD and never a slice of whatever string the client sent.
+  const tappedAt = typeof body.triggered_at === "string" ? Date.parse(body.triggered_at) : NaN;
+  const triggeredAt = new Date(Number.isNaN(tappedAt) ? Date.now() : tappedAt).toISOString();
   // One id shared by the archived photo, the n8n execution, and the Sheet row.
   // It is the join key that later lets a real weight be matched to this
-  // prediction, which is the whole point of archiving.
-  const donationId = body.donation_id ?? randomUUID();
+  // prediction, which is the whole point of archiving. Only a UUID is kept: the id
+  // lands in blob paths, the Sheet and the iPad's HTML.
+  const donationId =
+    typeof body.donation_id === "string" && UUID.test(body.donation_id) ? body.donation_id : randomUUID();
+  const description = typeof body.description === "string" ? body.description.slice(0, 2000) : "";
 
   const archive = await archivePhoto(body.image_b64, donationId, triggeredAt);
 
   const payload = {
-    description: (body.description ?? "").slice(0, 2000),
+    description,
     triggered_at: triggeredAt,
     location: body.location ?? null,
     image_b64: body.image_b64 ?? null,

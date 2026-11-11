@@ -24,6 +24,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Find the draft order Aperture created for a donation.
  *
@@ -90,8 +92,9 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "body must be JSON" }, { status: 400 });
   }
-  const id = (body.donation_id ?? "").trim();
-  if (!id) return NextResponse.json({ error: "donation_id required" }, { status: 400 });
+  const id = typeof body.donation_id === "string" ? body.donation_id.trim() : "";
+  // The id is matched by path suffix below, so anything but a full UUID could hit the wrong record.
+  if (!UUID.test(id)) return NextResponse.json({ error: "donation_id must be a UUID" }, { status: 400 });
 
   try {
     // Find the record blob for this donation (path is records/<date>/<id>.json).
