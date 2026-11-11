@@ -24,7 +24,5 @@
 
 ## Implications for existing docs (the recursive bit)
 
-- `docs/BUSINESS.md` plan step 1 ("train the model, the whole ballgame") is **softened**: collecting ground truth is still step 1 because it measures today's baseline AND feeds methods #2/#7, but the route to ≥95% may well run through #1 (SKU) where applicable.
-- `docs/deals/enterpriseco/` + conveyor brief: EnterpriseCo volume is largely SKU/barcode-rich parcels; method #1 + #3 likely dominates there, which materially de-risks that pitch (lookup, not estimation, for most items). Update 05-architecture / 13-buildout when re-engaging.
 - `SPEC.md` / `prompts/`: vision prompt should eventually emit `sku_candidate`, `label_text`, and `confidence` fields to enable hybrid routing (#8).
 - Anyone editing a plan doc: if it assumes a single accuracy method, fix it and cite this file.

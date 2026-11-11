@@ -79,7 +79,7 @@ The problem it replaces: manual log-and-weigh, which is slow, error-prone, and d
 
 ### Must-have (v1)
 - [x] iPad PWA installable from Vercel URL, single-button donation trigger
-- [x] Shared-token auth from iPad → Vercel → n8n → bridge
+- [x] Token auth on every hop: device token iPad → Vercel (`APERTURE_DEVICE_TOKEN`, `x-aperture-token` header; open while unset, until the iPad rollout), shared token Vercel → n8n (`APERTURE_SHARED_TOKEN`), bridge token n8n → bridge (`BRIDGE_TOKEN`, bridge path only)
 - [x] Camera snapshot retrieval (target: ≤3s round-trip)
 - [x] Vision-based item identification (produce type)
 - [x] Vision-based weight estimation (ChArUco-calibrated)
@@ -98,7 +98,7 @@ The problem it replaces: manual log-and-weigh, which is slow, error-prone, and d
 - Learned densities per item/supplier/season (+3-7 pp)
 - iPad correction button (redundant ground-truth)
 
-### Out of scope for v1 (per `docs/PRD.md §11-§12`)
+### Out of scope for v1
 - LED-framed staging zone for vision reliability
 - Industrial waterproof button (hardware trigger alternative to iPad)
 - Status LED + audio feedback loop
@@ -111,7 +111,7 @@ The problem it replaces: manual log-and-weigh, which is slow, error-prone, and d
 - Availability: 24/7 uptime; target 99%+ once Dell migration is complete. No SLA with Cul2vate (pro-bono/passion project).
 - Latency: iPad tap to confirmation ≤15s typical, ≤60s worst-case (Vercel `maxDuration=60`).
 - Reliability: firmware frozen on camera (Hikvision auto-upgrades are risk); n8n workflow snapshot committed for rollback; bridge service self-restarts via systemd.
-- Security posture: defense-in-depth with separate shared tokens at iPad→Vercel, Vercel→n8n, n8n→bridge. No secrets in PWA source. Bridge exposed only over HTTPS via Cloudflare Tunnel (no port forwarding at Cul2vate).
+- Security posture: a separate token per hop. iPad → Vercel: device token `APERTURE_DEVICE_TOKEN`, checked on every `/api/*` route, open while unset until the iPad rollout. Vercel → n8n: `APERTURE_SHARED_TOKEN`. n8n → bridge: `BRIDGE_TOKEN` (bridge path only). No secrets in PWA source. The iPad path opens no inbound port at Cul2vate.
 - Recoverability: rollback procedure documented in `docs/MIGRATION-RUNBOOK.md §Rollback`. Core artifacts versioned in git.
 - Observability (current): n8n execution log; Google Sheet as a de facto audit log. No structured metrics dashboard yet.
 - Observability (gap): no uptime monitor on `/healthz`; no alerting on 503. This is a known gap.
@@ -122,7 +122,7 @@ The problem it replaces: manual log-and-weigh, which is slow, error-prone, and d
 2. **Hik-Connect register status can drop** on camera power or net events. Auto-recovers in ~30s. Not a bug, a property.
 3. **Firmware auto-upgrade must stay disabled** at both camera UI and hik-connect.com dashboard.
 4. **Scale OCR needs calibration** before yielding readings; single `--calibrate` run post-deploy.
-5. **n8n langchain OpenAI v1.6 silently drops `systemMessage` + `responseFormat`** on Cloud Starter v2.13.3. Mitigation: embed JSON schema in user text. Documented in `.claude/integrations/registry.json → n8n.learned_patterns`.
+5. **n8n langchain OpenAI v1.6 silently drops `systemMessage` + `responseFormat`** on Cloud Starter v2.13.3. Mitigation: embed JSON schema in user text.
 6. **n8n `httpRequest` typeVersion 5** renders as "Install this node" on Starter plan; use 4.2.
 7. **JSON re-import clears `credentials: {}` even when IDs match**: always re-attach after import.
 
@@ -179,16 +179,11 @@ These are places where I've been filling in defaults from context; a fresh insta
 
 | File | Role |
 |---|---|
-| `ACT.md` | Autonomous action playbook: Q1-Q7 decision tree for any instance |
-| `checkpoint.md` | Live state: URLs, tokens, IDs, progress log, Dell preflight |
-| `DELL-SESSION.md` | Copy-paste bundle for Mika's RustDesk session |
-| `NEXT-STEPS.md` | Blocker-ordered action list (older but still accurate) |
 | `SPEC.md` | This file: perceived spec, subject to correction |
 | `docs/MIGRATION-RUNBOOK.md` | Full-detail Mac → Dell migration (5 phases) |
 | `docs/PRODUCTION-RUNBOOK.md` | Ops guide post-cutover |
 | `docs/HIK-CONNECT-SETUP.md` | Camera-side setup steps |
 | `docs/V2-AGENDA.md` | Post-v1 backlog (accuracy + features) |
-| `docs/PRD.md` | Original PRD |
 | `docs/DETERMINISM.md` | Reasoning for JSON-forced prompts + calibration approach |
 | `docs/LEARNING-LOOPS.md` | Plan for closing the accuracy learning loop |
 | `bridge/bridge.py` | FastAPI + pyezviz bridge code (Dell) |
@@ -197,12 +192,11 @@ These are places where I've been filling in defaults from context; a fresh insta
 | `scripts/check-state.sh` | One-command live audit |
 | `scripts/patch-n8n-to-dell.sh` | Phase 4 cutover |
 | `n8n/aperture-workflow-LIVE-snapshot.json` | Rollback artifact (if present) |
-| `outreach/adam-followup-2026-04-17.md` | Outbound client ask tracking |
 
 ## 13. Tasks this spec does NOT answer
 
-- How to run the actual Phase 2-3 Dell session commands (see DELL-SESSION.md)
-- How to invoke the cutover (see ACT.md Q4 or `scripts/patch-n8n-to-dell.sh`)
+- How to run the Phase 2-3 Dell session commands
+- How to invoke the cutover (see `scripts/patch-n8n-to-dell.sh`)
 - How to recover from specific n8n workflow corruptions (see learned patterns registry)
 
 ---

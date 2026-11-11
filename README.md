@@ -1,125 +1,170 @@
 # Aperture
 
-Aperture is a donation-weighing camera for food-rescue loading docks. It was built by
-Null Systems for [Cul2vate](https://cul2vate.org), a Nashville nonprofit that accepts
-produce donations at the Ellington Ag Center, and it grew out of an earlier prototype
-at The Branch food bank.
+Aperture logs food donations with a camera instead of a scale. I built it at Null Systems
+for [Cul2vate](https://cul2vate.org), a Nashville nonprofit that accepts produce
+donations at the Ellington Ag Center. It grew out of an earlier prototype at The Branch
+food bank.
 
-## What it does for Cul2vate
+**Who this is for:** people who run a donation or receiving dock and want a weight
+logged for every load without stopping at a scale, and who can live with an estimate.
 
-A volunteer stacks a donation inside the taped staging zone on the dock and taps one
-button on an old iPad. The mounted camera grabs a frame, a vision model reads what is in
-the zone and estimates its weight in pounds, and the batch is logged automatically: a row
-in the Google Sheet, a draft order in Farmbrite (the farm inventory system Cul2vate
-already uses), and a private copy of the photo. If the reading is wrong there is an undo
-button on the same screen. No typing, no scale, no laptop on the dock.
+A volunteer stacks a donation inside the taped zone on the dock and taps one button on
+an old iPad. The iPad pulls a frame from the mounted camera. A vision model names what
+is in the zone and estimates its weight in pounds. The batch lands in a Google Sheet,
+as a draft order in Farmbrite (the farm inventory system Cul2vate already uses), and as
+a private copy of the photo. If the reading is wrong, the undo button is on the same
+screen.
+
+## Try it in 5 minutes
+
+Everything here runs offline and costs nothing.
+
+```bash
+bash demo/run_demo.sh --provider stub
+demo/.venv/bin/pip install -r training-loop/requirements.txt pytest
+demo/.venv/bin/python -m pytest -q training-loop
+npm ci && npm run build && npm run dev
+```
+
+The demo builds `demo/.venv`, looks for the printed ChArUco board in the two bundled
+dock frames, and writes `demo/output/accuracy-report.md`. On my Mac it found:
+
+```
+- ChArUco detected: **1** / 2
+| IMG_0739.JPG | 0.00 | 0.00 |  |  | ❌ |  | too_few_corners | 0.00s |
+| dock-empty-night-IR.jpg | 0.00 | 0.00 |  |  | ✅ | 6.164 | poor | 0.00s |
+```
+
+The stub provider always answers 0 lb, so the weight columns only prove the plumbing
+works. The daytime frame is a real failure: only 4 of the board's 40 markers are
+readable in it. `demo/README.md` has the details.
+
+The training-loop tests include one that proves the known weight never reaches the
+vision prompt. `npm run dev` serves
+the UI only, the legacy PWA on `localhost:3000`. A tap there returns
+`Server not configured: N8N_WEBHOOK_URL missing`, because the real path needs n8n, the
+iPad and the camera.
+
+## What a tap returns
+
+```
+TODO-INTEGRATOR: paste one real response from
+`python3 scripts/vision-regression-test.py --e2e`, or one redacted row from
+`/api/export?format=json`. Do not invent values.
+```
+
+The relay passes through what the workflow's **Shape response** node builds:
+`weight_lbs`, `item_type`, `container_type`, `container_count`, `weight_lbs_low`,
+`weight_lbs_high`, `implausible_weight`, `prompt_version`, `model`,
+`farmbrite_order_id` and `notes`.
 
 ## How it works
 
 ```
-iPad (Scriptable script)                     n8n Cloud workflow
-  tap ──▶ HTTP-digest snapshot from the        1. verify shared token
-          IP camera over the LAN               2. vision model → structured JSON
-       ──▶ POST /api/donate  ──────────────▶      (items, containers, food weight)
-          (Next.js relay on Vercel;            3. plausibility guard, learned priors
-           archives the photo to Blob)         4. Google Sheet row + Farmbrite order
-       ◀── weight + IDs back to the screen ◀── 5. respond
+iPad (Scriptable)                          n8n Cloud (aperture-workflow-ipad-nim.json)
+  tap ─▶ digest GET of a JPEG from the       1. check the shared token
+         camera over the LAN                 2. NVIDIA NIM vision model → JSON
+      ─▶ POST /api/donate ─────────────────▶ 3. >2000 lb flag
+         (Next.js relay on Vercel;           4. Google Sheet row + Farmbrite draft
+          archives the photo to Blob)        5. respond
+      ◀── weight + IDs on the screen ◀───────
 ```
 
-- **Edge capture.** The iPad pulls a JPEG straight from the camera's ISAPI endpoint
-  (any ONVIF/ISAPI-class IP camera with a snapshot URL works) and posts it to the relay.
-  Nothing on the LAN needs to be reachable from the internet, and there is no always-on
-  server on site (`docs/decisions/2026-07-28-no-always-on-server.md`).
-- **Calibration.** A ChArUco board is mounted in the camera's view so the scene has a
-  known physical scale (`demo/charuco_preprocessor.py`, `demo/auto_detect_board.py`).
-- **Multimodal reasoning with structured output.** The prompt (`prompts/weight-estimation.md`,
-  currently v0.8) asks the model to count containers and name goods only inside the taped
-  zone, returns a types-only JSON schema, and treats "unidentified" and "empty" as valid
-  answers. Each prompt version records the failure it fixes.
-- **Historical density priors.** `training-loop/learning/` maintains per-item densities,
-  bias multipliers and container references from ground-truth events, clamped per cycle,
-  and publishes them as JSON under `public/learned-state/` for the workflow to read.
+- **Capture.** Tested with a Hikvision AcuSense over ISAPI digest. The client is
+  `camera-access/ipad/aperture-pull.js`.
+- **Scale reference.** A printed ChArUco board hangs in the camera's view, so the
+  model sees an object of known size in every frame. `demo/charuco_preprocessor.py`
+  measures the board with OpenCV, but only in the offline demo, and it finds the board
+  in 1 of the 2 bundled frames.
+- **Prompt.** `prompts/weight-estimation.md` (v0.8-scene) is the file to change if you
+  want the model to behave differently. It has the model count containers and name
+  goods only inside the taped zone, return a types-only JSON schema, and answer
+  "unidentified" or "empty" when that is the truth. Each version records the failure it
+  fixes. `scripts/rewire-n8n-ipad-nim.py` pushes it into the workflow.
+- **Learned priors: built, not wired.** `training-loop/learning/` computes per-item
+  densities and bias multipliers, but the live workflow applies empty tables.
 
-## Hardware
+## Why it is built this way
 
-One PoE IP camera with a snapshot endpoint, one printed ChArUco board, one spare iPad
-running [Scriptable](https://scriptable.app), and (optionally) one small Docker host if
-you want the camera bridge instead of the iPad pull. The production install at Cul2vate
-uses the iPad path and no on-site computer. Bill of materials: `docs/BOM.md`.
+The camera is LAN-only, and the iPad is already on the dock network at every tap, so
+the iPad pulls the frame itself. That needs no on-site server and no new hardware
+([decision](docs/decisions/2026-07-22-ipad-lan-bridge.md)). Vision runs on NVIDIA NIM
+behind an n8n credential, so there is nothing of mine to keep alive. The trade is that
+the free credits run out one day
+([decision](docs/decisions/2026-07-28-no-always-on-server.md)). There is no scale on
+the dock because the scale was the bottleneck: someone had to weigh and write down
+every load. The price is that every weight is an estimate.
 
-## Repository map
+## Deploy your own
 
-| Path | What |
+1. **n8n.** Import `n8n/aperture-workflow-ipad-nim.json` and follow `n8n/README.md`.
+2. **NVIDIA NIM key.** Store it as the `NVIDIA NIM (Aperture)` credential in n8n.
+3. **Google Sheet** with a `Donations` tab, connected through n8n's Google Sheets
+   credential.
+4. **Farmbrite (optional).** `scripts/farmbrite-setup.py` finds your IDs. Leave the
+   Farmbrite variables blank and the workflow skips it.
+5. **Vercel + Blob.** Deploy this repo to Vercel, create a private Blob store, and set
+   the variables in the table below.
+6. **iPad build.** Set `RELAY` at the top of `scripts/make-ipad-script.py` to your
+   Vercel URL. Put the camera's address and login in a gitignored `SECRETS.local.md`
+   as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
+   Export `APERTURE_DEVICE_TOKEN` (the same value as in Vercel), run
+   `python3 scripts/make-ipad-script.py`, then follow
+   `camera-access/ipad/ONSITE-CARD.md`.
+
+Hardware: one IP camera with a snapshot URL, one printed ChArUco board, and a spare
+iPad running [Scriptable](https://scriptable.app). Bill of materials: `docs/BOM.md`.
+Day-to-day operations: `docs/OPERATIONS.md`.
+
+## Configuration
+
+`.env.example` lists what the Vercel app reads:
+
+| Variable | Read by |
 |---|---|
-| `app/`, `public/` | Next.js PWA and the `/api/donate`, `/api/correct`, `/api/void`, `/api/export` relay routes |
-| `n8n/`, `prompts/` | Exported workflow versions; the versioned vision prompt |
-| `camera-access/ipad/` | The on-site Scriptable client and install card |
-| `bridge/`, `deploy/` | FastAPI camera bridge with a token-gated `/v1` vision proxy; Dockerfiles and compose |
-| `demo/` | Deterministic ChArUco pipeline, harness and two real dock frames |
-| `training-loop/` | Hidden-weight evaluator, scraper, learning loop, unit test |
-| `docs/`, `scripts/` | Operations, runbooks, decisions, accuracy roadmap; setup, smoke and regression scripts |
+| `N8N_WEBHOOK_URL` | `/api/donate`, to forward each tap to n8n |
+| `APERTURE_SHARED_TOKEN` | `/api/donate` and `/api/correct`, sent to n8n's **Verify Token** node |
+| `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header. `scripts/make-ipad-script.py` bakes it into the iPad build |
+| `BLOB_READ_WRITE_TOKEN` | `/api/donate` (archives the photo), `/api/void`, `/api/export` |
+| `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo |
+| `N8N_CORRECTION_URL` | `/api/correct`. No workflow receives it yet |
+| `NEXT_PUBLIC_LOCATION_LABEL` | `app/page.tsx`, the legacy PWA's location label |
 
-## Running locally
+The optional camera bridge has its own `bridge/.env.example` and
+`deploy/.env.example`. Files that are local on purpose are not in the repo:
+`SECRETS.local.md`, the generated `*.local.js` iPad build, Farmbrite CSV exports, and
+the demo's generated `demo/output/`.
 
-PWA and relay:
+## Limits and security
 
-```bash
-npm install
-cp .env.example .env.local
-npm run dev
-```
-
-Camera bridge (the LAN-digest variant; `bridge/bridge.py` is the Hik-Connect variant):
-
-```bash
-python3 -m venv .bridge-venv && . .bridge-venv/bin/activate
-pip install -r bridge/requirements.txt
-export CAM_PASS='<camera password>' BRIDGE_TOKEN="$(openssl rand -hex 32)"
-python bridge/mac_bridge.py
-```
-
-Or with Docker: fill in `deploy/.env.example` and follow `deploy/QUICKSTART.md`.
-
-Training loop:
-
-```bash
-pip install -r training-loop/requirements.txt
-python -m pytest -q training-loop
-OPENAI_API_KEY=... python3 training-loop/run_cycle.py
-```
-
-`training-loop/README.md` describes the residual loop; `training-loop/learning/config.yml`
-holds the learning-cycle limits.
+The weights have not been checked against a scale on this camera. Treat the logged
+pounds as an operational record and a trend, not audited poundage. The model's
+self-reported confidence did not separate good readings from bad ones, so no operator
+screen shows it. The relay checks a device token, but the check stays open until
+`APERTURE_DEVICE_TOKEN` is set, so treat the relay URL as a secret until then. The
+generated iPad build holds the camera password. The Next.js PWA in `app/` is legacy:
+it posts no image, so it only works with one of the bridge-era workflows in `n8n/`.
+`/api/correct` exists, but nothing on the n8n side receives corrections yet, so ground
+truth does not flow back. What is secret and how to report a problem:
+[SECURITY.md](SECURITY.md).
 
 ## Status
 
-Live at Cul2vate since August 2026 (`docs/OPERATIONS.md` is the authoritative operations
-record; `docs/STATE.md` is a frozen June 2026 snapshot).
+Live at Cul2vate since August 2026. `docs/OPERATIONS.md` is the record of what runs and
+what breaks on its own. `CHANGELOG.md` has the history.
 
-Validated on real hardware: the full chain (camera → relay → vision → Sheet → Farmbrite)
-from an iPad tap on the dock; deterministic output for a given frame (60/60/60 lb across
-three runs); an empty-zone negative control and a produce positive control in
-`scripts/vision-regression-test.py`; Farmbrite writes against the real account; the
-hidden-weight protocol under unit test.
+## Contributing
 
-Not validated: the weights themselves have not been checked against a scale on this
-camera. Treat the logged pounds as an operational record and trend, not audited
-poundage, until ground truth flows through `/api/correct`. The model's self-reported
-confidence measured as uninformative and is hidden from every operator surface.
-
-## Tests
-
-There is one unit test, `training-loop/test_hidden_weight.py`, which proves the known
-weight never reaches the vision prompt. CI runs it on every push. The vision regression
-suite needs a live model endpoint and is run by hand.
+Issues and pull requests are welcome. Run the offline checks above first, and run
+`scripts/vision-regression-test.py` against a live model for any prompt change.
 
 ## Provenance
 
 This is the public copy of the private working repository, with the full commit history
 preserved. Before publishing, `git-filter-repo` removed camera credentials, LAN and
 hosting identifiers, a third party's confidential deal material, and personal contact
-details from every commit; a placeholder company name and role descriptions stand in for
-the removed names. Commits before 2026-06-10 were reconstructed from file timestamps
+details from every commit. A placeholder company name and role descriptions stand in
+for the removed names. Commits before 2026-06-10 were reconstructed from file timestamps
 when the project moved into git.
 
 Much of the code and documentation was written with Claude as a co-author.

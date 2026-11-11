@@ -13,7 +13,7 @@ Architecture + safeguards detail: [`../LEARNING-LOOPS.md`](../LEARNING-LOOPS.md)
 
 ## Stubbed / aspirational (do NOT report as working)
 
-- Density learner: `density_learner.py` runs but `measured_volume_cu_in` is a **stub** (v1.1 TODO at `learning/run_cycle.py`). Until vision emits volume, density learning falls back to baseline. [VERIFIED stub]
+- Density learner: `density_learner.py` runs but `measured_volume_cu_in` is a **stub** (v1.1 TODO at `training-loop/learning/run_cycle.py`). Until vision emits volume, density learning falls back to baseline. [VERIFIED stub]
 - Ensemble weights: neutral 0.2×5 seed; real per-specialist learning is v2.0. [VERIFIED scaffold]
 - Custom vision fine-tune: explicitly out-of-scope in `training-loop/README.md`. The new fine-tune track (Qwen2.5-VL LoRA on dock captures) is **planned, not built**.
 - Ground-truth inflow: `learned-densities.json` / `bias-table.json` are **empty**; no real donation has fed the loop. Cron (`aperture-learning.timer`, daily 3AM Dell) is wired but has no data.

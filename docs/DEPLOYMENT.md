@@ -1,5 +1,7 @@
 # Deployment playbook: tomorrow's site visit
 
+> Superseded by `docs/OPERATIONS.md`. Kept as history; do not follow it for a new install.
+
 Goal: drive up, install hardware, leave with Aperture live on the iPad and
 logging test donations to Farmbrite.
 
@@ -56,7 +58,7 @@ except your own accounts.
 
 ## Phase 1: on arrival at Cul2vate (30 minutes)
 
-- [ ] **Sign install (Joshua already there if the client contact isn't)**
+- [ ] **Sign install (a Cul2vate staff member if the client contact is not there)**
   - [ ] Hold the 36×44" Dibond flush against the brick. Level. Mark the 6
         pre-drilled hole centers through the board with pencil.
   - [ ] Hammer-drill each with the Tapcon bit.
@@ -95,7 +97,7 @@ except your own accounts.
   ```
 - [ ] Camera-access bridge: pick one from `camera-access/README.md`:
   - [ ] Option A: plug in your pre-flashed Cloudflare-Tunnel device.
-        Edit `cloudflared-config.yml` with the real camera IP. Restart
+        Edit your local cloudflared config with the real camera IP. Restart
         cloudflared. `curl https://camera.example.com/…` from your
         phone (off WiFi) should return the same JPEG.
   - [ ] Whatever option you picked, end state: a public HTTPS URL that
@@ -130,10 +132,10 @@ except your own accounts.
      entry visible in the Farmbrite UI.
   3. Mixed-produce pallet → weight should be in range (compare to the client contact's
      rough mental estimate; no scale needed yet).
-- [ ] Snap a screenshot of each result in the PWA. Put in `docs/pilot-day1/`
+- [ ] Snap a screenshot of each result in the PWA. Keep them locally
       for the residual log baseline.
 
-## Phase 5: hand-off to the client contact/Joshua (10 minutes)
+## Phase 5: hand-off to the client contact (10 minutes)
 
 - [ ] **Kiosk-mode the iPad** per `docs/IPAD-SETUP.md` (§1-§4): Guided
       Access locked to Aperture, auto-lock never, Do Not Disturb on, iPad
@@ -148,12 +150,7 @@ except your own accounts.
 
 ## Phase 6: drive home, commit everything (25 minutes)
 
-- [ ] Snapshot the camera's final mount angle + the iPad on the wall into
-      `docs/pilot-day1/photos/`.
-- [ ] Git commit the real IP + domain into `camera-access/cloudflared-config.yml`
-      (ONLY if not secret) and push.
-- [ ] Update `memory/project_aperture.md` with the actual camera IP, Farmbrite
-      endpoint, n8n workflow ID, Vercel URL.
+- [ ] Photograph the camera's final mount angle and the iPad on the wall.
 - [ ] Schedule a 2-day check-in text to the client contact.
 
 ---

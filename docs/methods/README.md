@@ -9,15 +9,16 @@ Per Mika (2026-06-15): *"as we work and working methods are discovered, log it a
 
 This registry is the **execution-layer memory** for that loop. It mirrors the Null Systems engineering bar's pillar 5 (audit-replayable decisions) and the existing recursive docs (`docs/ACCURACY-ROADMAP.md`, `docs/LEARNING-LOOPS.md`).
 
-## The three domains
+## The domains
+
+Camera connectivity is settled and recorded in
+[`../decisions/2026-07-22-ipad-lan-bridge.md`](../decisions/2026-07-22-ipad-lan-bridge.md).
+The two open domains:
 
 | Domain | File | What it tracks |
 |---|---|---|
-| Camera connectivity | [`camera-connectivity.md`](camera-connectivity.md) | How we get a live frame from the Cul2vate camera: verified path, current blocker, one-shot unblock |
 | Weight accuracy | [`weight-accuracy.md`](weight-accuracy.md) | Measured accuracy + the method portfolio that moves it (links `ACCURACY-ROADMAP.md`) |
 | ML / RL continuity | [`ml-rl-continuity.md`](ml-rl-continuity.md) | The learning loop: what's real vs stub, cadence, safeguards (links `LEARNING-LOOPS.md`) |
-
-Cross-cutting append-only journal: [`SESSION-LOG.md`](SESSION-LOG.md).
 
 ## The recursion protocol (how agents use this)
 
@@ -34,5 +35,5 @@ Every method file carries the same shape:
 
 - Marking a method `[VERIFIED]` from a plan or a self-report instead of a first-hand run. (The repo already had two of these: a "sent" email that was a draft, and "extracted" historical data that was an empty folder; caught 2026-06-15. Verify against primary sources.)
 - Editing a method silently with no change-log entry → breaks auditability.
-- Fabricating data/results to "fill a gap" (per `feedback_real_data_not_synthetic`). A blank is honest; a fake is poison.
+- Fabricating data or results to "fill a gap". Use real data. A blank is honest; a fake is poison.
 - Letting git drift behind the working state. Commit as methods are discovered.

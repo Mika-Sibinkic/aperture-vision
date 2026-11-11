@@ -13,10 +13,10 @@ Last verified: **2026-08-02**.
 | Layer | What | Where | Verified |
 |---|---|---|---|
 | Capture | Hikvision AcuSense <device-serial>, ISAPI digest over LAN at `<camera-ip>` | Cul2vate dock | frames pulled 2026-06-15 |
-| Trigger | Scriptable script on the on-site iPad, foreground at tap time | iPad | digest math verified vs RFC 2617; on-device hop pending |
+| Trigger | Scriptable script on the on-site iPad, foreground at tap time | iPad | iPad → camera hop verified on the dock 2026-08-02 (system check) |
 | Relay | Next.js route `/api/donate` (archives photo, forwards, writes record) | Vercel, `<vercel-app-host>` | live |
 | Orchestration | n8n workflow `<n8n-workflow-id>`, **17 nodes**, active | n8n Cloud, project **Main** | live |
-| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.6-net** | NIM (hosted) | 9.8-12.5 s per tap |
+| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.8-scene** | NIM (hosted) | 9.8-12.5 s per tap |
 | Log | Google Sheet `Donations` | Google | live |
 | Photo + record store | Vercel Blob, **private** store `<blob-store>` | Vercel | live |
 | Export | `/api/export` → CSV (`?format=json`, `?since=YYYY-MM-DD`) | Vercel | live |
@@ -39,7 +39,7 @@ Everything below is reachable from any machine with this repo and the credential
 | Swap the vision provider | create an n8n credential, point the vision node at it | one credential change |
 | Farmbrite product map | re-run the fetch in `scripts/farmbrite-setup.py` | read-only unless `--create` |
 | **The iPad script itself** | see §3, iCloud Drive | file edit, no visit |
-| Check health from anywhere | `python3 scripts/vision-regression-test.py --e2e` | read-only probe |
+| Check health from anywhere | `python3 scripts/vision-regression-test.py --e2e` | writes real test records, then voids each one; the Sheet rows stay |
 | Read what happened | `/api/export`, the Google Sheet, n8n execution log | read-only |
 
 ### Requires being on site (short list)
@@ -61,7 +61,7 @@ iPad. The supported path is **iCloud Drive**:
    (Settings → Apple ID → iCloud → Scriptable → on).
 2. A folder then appears on the Mac at
    `~/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents`.
-3. Editing `Aperture.js` there syncs to the iPad automatically.
+3. Editing the `Aperture` script file there syncs to the iPad automatically.
 
 So iPad-side fixes ship as a file edit. Regenerate with
 `python3 scripts/make-ipad-script.py` and copy the result into that folder.
@@ -102,11 +102,12 @@ been done to make them as good as possible without ground truth:
 - Tare removed (it double-subtracted).
 - `temperature: 0` and a deterministic weight path; same image gives the same number
   (measured 60/60/60 lb across three runs).
-- A plausibility guard flags anything over 2000 lb from a 6×6 ft zone.
+- A >2000 lb flag: any reading over 2000 lb gets `implausible_weight_review`. It flags
+  the reading for review and does not block the write.
 
 None of that establishes error tolerance. Until real weights flow through
 `/api/correct`, treat the numbers as **operational record and trend**, not audited
-poundage. `docs/AUDIT-PREHANDOFF.md` §B4 tracks this.
+poundage.
 
 ---
 
@@ -121,8 +122,7 @@ poundage. `docs/AUDIT-PREHANDOFF.md` §B4 tracks this.
 | Vercel Blob free tier (~1 GB ≈ 4,000 photos) | archiving stops, `archive_error` set; taps unaffected | prune old photos or upgrade |
 | n8n Cloud monthly execution cap | **all taps fail** | verify the plan's ceiling against volume |
 
-Nothing currently alerts on any of these; that is the largest sustainability gap and
-is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
+Nothing currently alerts on any of these. That is the largest sustainability gap.
 
 ---
 
@@ -146,6 +146,9 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
   work hangs the script on a blank screen.
 - **`Request.timeoutInterval` is not reliably honoured.** A 20 s interval sat past
   60 s. Race every network call against a hard `Timer`.
+- **System check is a real tap, then an undo.** It posts a live frame described as
+  `SYSTEM CHECK — ignore this row`, then voids it. The Sheet row stays, labeled by
+  that description.
 - Verify any change with `bash scripts/check-ipad-script.sh`; `node --check` alone
   passes files whose functions have been deleted.
 
@@ -167,7 +170,7 @@ is tracked as `docs/AUDIT-PREHANDOFF.md` §B2.
 ## 9. Command reference
 
 ```bash
-# health, from anywhere
+# health check through the live relay (writes test records, then voids them)
 python3 scripts/vision-regression-test.py --e2e
 
 # change the model / prompt / mapping, then apply (backs up, verifies, reads back)

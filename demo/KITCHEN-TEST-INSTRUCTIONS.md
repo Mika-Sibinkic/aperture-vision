@@ -1,11 +1,11 @@
 # Kitchen test capture: instructions for Mika
 
 The harness is wired. We need 8-12 (image, true_weight_lbs) pairs to populate
-the accuracy report before the EnterpriseCo call. ~30 minutes of work.
+the accuracy report. ~30 minutes of work.
 
 ## Setup (5 min)
 
-1. **Print the board.** `~/Downloads/Charuco Board 36x44 300dpi.png`. Print at
+1. **Print the board.** Use the 36x44 in, 300 dpi ChArUco print file. Print at
    the largest size your printer supports (letter / tabloid / poster; it doesn't
    matter, the math computes from the squares). Display on a tablet or second
    monitor in fullscreen if you don't want to print.
@@ -23,7 +23,7 @@ the accuracy report before the EnterpriseCo call. ~30 minutes of work.
 ## Verify before you capture the full set (2 min)
 
 Take ONE test photo (board visible + something simple in the zone, like a
-mug). Drop the file into `aperture/demo/test-images/` and call it `verify_01.jpg`.
+mug). Drop the file into `demo/test-images/` and call it verify_01.jpg.
 
 Then run:
 
@@ -59,8 +59,8 @@ For each item:
    453.59 g; convert if your scale only does grams).
 3. **Photograph with the fixed camera position.** Both the item AND the
    ChArUco board must be in frame.
-4. Save the image to `aperture/demo/test-images/`. Filename like
-   `kitchen_01_apple.jpg` or anything you'll remember.
+4. Save the image to `demo/test-images/`. Use a filename like
+   kitchen_01_apple.jpg, or anything you'll remember.
 
 ## Tell me about each shot
 
@@ -85,9 +85,8 @@ The harness reports:
 
 We're aiming for mean absolute % error ≤ 15% on this v1 static-mode pipeline
 (no learned density, no specialist ensemble). Anything better is upside.
-For the EnterpriseCo call we're framing accuracy as "directionally good for advisory
-pre-cube, not legal-for-trade", so even if a couple of items hit ±20%, the
-story holds.
+The framing is "directionally good, not legal-for-trade", so a couple of items at
+±20% is acceptable.
 
 ## Expected runtime
 
@@ -97,7 +96,5 @@ story holds.
 
 ## When you're done
 
-Drop a Slack/iMessage with the test-set filenames + weights. I'll fold them
-into the manifest, run the harness, and the accuracy report at
-`demo/output/accuracy-report.md` becomes the live demo evidence for the
-meeting.
+Add each shot to `demo/manifest.yaml` with its true weight, then run the harness.
+The report at `demo/output/accuracy-report.md` is the evidence.

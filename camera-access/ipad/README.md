@@ -8,7 +8,7 @@
 ## Why this is the right unlock
 
 - The mounted Hikvision is **LAN-only** (ISAPI digest over HTTP). Hik-Connect
-  cloud-pull is dead for this camera (see `docs/methods/camera-connectivity.md`).
+  cloud-pull did not work for this camera (CHANGELOG, 2026-07-22).
 - The **iPad is already on the Cul2vate LAN** and is already the button-press
   front end. It is the one always-on-site device on the right network.
 - iOS will **not** let an app run a persistent inbound server (apps get
@@ -54,10 +54,11 @@ iPad. That removes every settings prompt from the on-site procedure.
 ## Backend status: LIVE and verified (2026-08-02)
 
 Vercel prod relay → n8n (17 nodes, active) → NVIDIA NIM
-`nvidia/nemotron-nano-12b-v2-vl`, prompt v0.6-net → Google Sheet + Farmbrite draft
+`nvidia/nemotron-nano-12b-v2-vl`, prompt v0.8-scene → Google Sheet + Farmbrite draft
 order. A real POST returns 200 in 9.8-12.5 s and writes a row. Both regression controls pass:
-`python3 scripts/vision-regression-test.py --e2e`. The **only** hop not yet exercised
-is the iPad reaching the camera over the Cul2vate LAN; that is what the self-test checks.
+`python3 scripts/vision-regression-test.py --e2e`. The iPad → camera hop passed the
+system check on the dock on 2026-08-02. Run the system check again after any network
+change.
 
 ## On-site install (~10 min, needs the iPad on Cul2vate WiFi): background detail
 

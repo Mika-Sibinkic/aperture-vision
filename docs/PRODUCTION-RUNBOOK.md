@@ -35,7 +35,7 @@ Full end-to-end launch checklist. Each section is ordered. Don't skip ahead.
 - [ ] Platform Access enabled on camera, Register Status = Online
 - [ ] Camera added to Hik-Connect account via serial + verification code
 - [ ] Serial number recorded for bridge env
-- [ ] Firmware version recorded in `docs/FIRMWARE-FROZEN.md`
+- [ ] Firmware version recorded in the Capture row of `docs/OPERATIONS.md`
 - [ ] Auto-upgrade confirmed OFF
 
 ### 2. Dell G7 bridge (`docs/BRIDGE-DEPLOY.md`)
@@ -117,7 +117,7 @@ Copy the Sheet ID from the URL (`docs.google.com/spreadsheets/d/<THIS>/edit`).
 
 ## Day-of-launch
 
-When the client contact/Joshua walk up to use it the first time:
+When Cul2vate staff walk up to use it the first time:
 1. Show them the iPad on its mount
 2. Walk through one donation end-to-end
 3. Show them the Google Sheet that's being populated
@@ -140,7 +140,7 @@ When the client contact/Joshua walk up to use it the first time:
    hik-connect.com login works. Camera Platform Access status still Online?
 
 ### "Weights are way off"
-1. Check `docs/FIRMWARE-FROZEN.md`; firmware still matches? If no, roll back.
+1. Check the firmware version in `docs/OPERATIONS.md`; firmware still matches? If no, roll back.
 2. Look at the residuals log (`training-loop/residuals.jsonl`). Is the bias
    table stale?
 3. Has the camera moved? (Zoom/focus/position locked and MANUAL, but someone

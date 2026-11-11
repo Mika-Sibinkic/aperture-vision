@@ -17,7 +17,7 @@ Current pipeline (when the camera is up): deterministic ChArUco `pixels_per_inch
 | Case | Single-RGB error | Evidence |
 |---|---|---|
 | One regular item (apple, onion, squash) | ±4-7% | apple CNN 95.7%; plum MAPE ~7%; tomato ~93% [VERIFIED lit.] |
-| Heaped / mixed loose produce | ±15-25% | Nutrition5k RGB mass error; EnterpriseCo brief ±15-25% [VERIFIED] |
+| Heaped / mixed loose produce | ±15-25% | Nutrition5k RGB mass error [VERIFIED] |
 | Item with scale in frame | ±0.5% | it's a measurement [VERIFIED] |
 
 **Reachable reframe:** ±5% **blended, confidence-gated**: nail easy items, route un-nailable ones to a real reading. This is `ACCURACY-ROADMAP.md` #7 (scale-in-loop) + #8 (hybrid routing).

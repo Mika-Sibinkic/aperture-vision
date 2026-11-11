@@ -1,5 +1,7 @@
 # iPad kiosk setup: Cul2vate
 
+> Superseded by `docs/OPERATIONS.md`. Kept as history; do not follow it for a new install.
+
 The AI model runs in n8n Cloud + OpenAI. The iPad is a kiosk: button +
 description box + result display. So "always on" means "always available
 for a volunteer to tap," not "always running a model."
@@ -92,7 +94,7 @@ or getting stuck on a notification.
 The iPad is now locked to Aperture until you exit Guided Access (triple-
 click → enter passcode → End).
 
-### To hand the iPad off to the client contact/Joshua:
+### To hand the iPad off to Cul2vate staff:
 
 Don't exit Guided Access when you leave. Tell the client contact the triple-click +
 passcode only if he needs it for iOS updates; day-to-day he never exits.

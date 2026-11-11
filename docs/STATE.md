@@ -4,15 +4,14 @@
 > 2026-06-10. For what is running right now, and for what can be changed remotely vs.
 > on site, read **`docs/OPERATIONS.md`**.
 
-> **Reality check (2026-06-10, per Mika):** current state is NOT an EnterpriseCo-ready deployment. It is an image model with the hope of attaching training data, targeting Cul2vate loading-dock produce measurement. Component statuses below describe plumbing, not validated measurement capability. See docs/BUSINESS.md.
+> **Reality check (2026-06-10, per Mika):** current state is an image model with the hope of attaching training data, targeting Cul2vate loading-dock produce measurement. Component statuses below describe plumbing, not validated measurement capability.
 
-> State: frozen snapshot · Optionality: none (historical record) · Open to Change: no. Live state belongs in checkpoint.md.
+> State: frozen snapshot · Optionality: none (historical record) · Open to Change: no. Live state belongs in docs/OPERATIONS.md.
 
 ## Tracks
 | Track | State |
 |---|---|
 | Cul2vate production (Ellington Ag Center) | PWA + n8n live; **camera bridge DOWN** (Mac bridge killed 2026-04-17; Dell migration paused at Phase 2) |
-| EnterpriseCo / the prospect contact enterprise | Met 2026-05-07; static demo + conveyor pivot + paid-pilot posture presented; see docs/deals/enterpriseco/ + docs/sales/ |
 | Branch (Antioch) | Pre-Aperture prototype era; not active |
 
 ## Live components (as of last checkpoint, 2026-05-19)

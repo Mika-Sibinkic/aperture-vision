@@ -77,7 +77,7 @@ Configuration → System → System Settings → Basic Information
   → Encoding Version:  V7.X build XXXXXX
 ```
 
-Write both to `docs/FIRMWARE-FROZEN.md` in this repo so future-you knows what
+Write both into the Capture row of `docs/OPERATIONS.md` so future-you knows what
 was running when the system last worked.
 
 ### 5b. Disable auto-update + upgrade prompts
@@ -154,4 +154,4 @@ re-verify the credentials.
 | Eero reboot / WAN IP change | Camera re-registers in ~30 sec. Zero intervention. |
 | Hik-Connect password changed | Update `/etc/aperture-bridge.env` on Dell, `systemctl restart aperture-bridge`. |
 | `pyezviz` library breaks after Hikvision API change | Pin to last-known-working version in `requirements.txt` (already done: `pyezviz==0.2.2.5`). If the pinned version stops working, check pyezviz GitHub releases for a patch. |
-| Firmware auto-updated despite lockdown | Read `docs/FIRMWARE-FROZEN.md` for the last-known-working version. Roll back via System → Maintenance → Upgrade → select offline firmware file (download from hikvisionusa.com if needed). |
+| Firmware auto-updated despite lockdown | Read `docs/OPERATIONS.md` for the last-known-working version. Roll back via System → Maintenance → Upgrade → select offline firmware file (download from hikvisionusa.com if needed). |

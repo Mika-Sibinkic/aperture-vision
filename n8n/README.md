@@ -1,65 +1,62 @@
-# n8n setup: Aperture
+# n8n workflow
 
-The workflow is `aperture-workflow.json`. Import it, then fill in the slots.
+Import this one: `aperture-workflow-ipad-nim.json`. It is the live 17-node workflow.
+`scripts/rewire-n8n-ipad-nim.py` generates it. The script reads the live workflow over
+the n8n API, rewires it for the iPad and NVIDIA NIM, checks it, writes the redacted
+copy here, then PUTs it back (`--dry-run` stops before the PUT, `--restore <backup>`
+rolls back).
 
-## 1. Import
+The other six files are history. Scripts and old runbooks still name some of them, so
+they stay where they are. Every one of them fetches the camera frame through the
+camera bridge, which the iPad path no longer uses.
 
-In n8n Cloud (or self-hosted):
-
-1. Workflows → **Import from File** → `aperture-workflow.json`
-2. Leave it **inactive** until all credentials below are connected.
-
-## 2. Environment variables (n8n → Settings → Variables)
-
-Per [feedback_n8n_native_nodes] use native nodes + credentials. The workflow
-references these env vars via `{{ $env.NAME }}`:
-
-| Variable | Purpose | Where to get it |
+| File | Nodes | How it differs |
 |---|---|---|
-| `APERTURE_SHARED_TOKEN` | Must match the value in Vercel env. Rejects unauthenticated callers. | `openssl rand -hex 32` |
-| `HIKVISION_CAMERA_URL` | HTTPS URL that returns a JPEG snapshot from the camera. | See `../camera-access/README.md`; pick an option, paste the resulting URL here. |
-| `FARMBRITE_API_BASE` | `https://api.farmbrite.com/v1` (confirmed via https://developers.farmbrite.com/docs/). Leave blank to skip Farmbrite writes. | Official docs |
-| `FARMBRITE_INVENTORY_TYPE_ID` | ID of the inventory_type to append donations to. Auto-created as "Aperture Donations" by the probe script. | `./scripts/discover-farmbrite-endpoint.sh` |
-| `FARMBRITE_LOCATION_ID` | ID of the Farmbrite location (warehouse/farm) to credit. | Same script lists existing locations |
-| `APERTURE_LOG_SHEET_ID` | Google Sheet ID for the running donation log (fire-and-forget parallel to Farmbrite). | Create the sheet, copy ID from its URL |
+| `aperture-workflow.json` | 19 | First build (April 2026): bridge fetch, OpenAI vision, optional bias and density fetches |
+| `aperture-workflow-starter.json` | 19 | Same nodes, named "STARTER-COMPATIBLE v1.1" |
+| `aperture-workflow-MERGED.json` | 19 | Same nodes, named "MERGED" |
+| `aperture-workflow-CLEAN.json` | 17 | First build without the two optional fetches |
+| `aperture-workflow-LIVE-snapshot.json` | 16 | Bridge-era live copy, no Farmbrite write |
+| `aperture-workflow-LIVE-v2.json` | 16 | Bridge-era live copy with a 401 response, no Farmbrite write |
 
-## 3. Credentials (n8n → Credentials)
+The legacy PWA in `app/page.tsx` posts no image, so it only works against one of these
+bridge-era workflows.
 
-Create three credentials and wire them into the matching nodes:
+## Set it up
 
-1. **Hikvision Camera (HTTP Digest Auth)**
-   - User/pass set during first-boot of the camera (keep these in 1Password).
-2. **OpenAI API**
-   - API key from `platform.openai.com`. Model `gpt-4o` in the Vision node.
-   - Swap to Anthropic Claude by changing the node; see `prompts/weight-estimation.md`.
-3. **Farmbrite API Key (HTTP Header Auth)**, *optional at first-run*
-   - If you don't have the key yet: skip this credential entirely AND leave
-     the `FARMBRITE_API_*` env vars blank. The workflow detects the missing
-     config, skips the Farmbrite write, and still returns weight + item type
-     to the iPad. Every execution is preserved in n8n execution history;
-     backfill to Farmbrite once the key is wired.
-   - Header name: confirm via `./scripts/discover-farmbrite-endpoint.sh`.
-     Typically `Authorization: Bearer <key>` or `X-Api-Key: <key>`.
+Use native n8n nodes and n8n credentials. Keys never go in the workflow JSON.
 
-## 4. Paste the vision prompt
+1. Workflows → **Import from File** → `aperture-workflow-ipad-nim.json`. Leave it
+   inactive.
+2. In **Verify Token**, replace `REDACTED-see-SECRETS.local.md` with your shared
+   token. It must match `APERTURE_SHARED_TOKEN` in Vercel (`openssl rand -hex 32`).
+3. Create the credentials and attach them:
+   - `NVIDIA NIM (Aperture)`: Header Auth, `Authorization: Bearer <NIM key>`, on
+     **Vision: weight estimate**.
+   - Google Sheets OAuth2, on **Append to Google Sheet**. Put your sheet ID in place
+     of `<google-sheet-id>`. The tab is named `Donations`.
+   - `Farmbrite (Aperture)`: Header Auth, on **Farmbrite: log order**. Optional.
+4. Farmbrite is optional. Set `FARMBRITE_API_BASE`, `FARMBRITE_INVENTORY_TYPE_ID` and
+   `FARMBRITE_LOCATION_ID` in n8n variables to turn it on. With any of them blank,
+   **Guard: Farmbrite configured** skips the write and the tap still returns a
+   weight. `scripts/farmbrite-setup.py` finds the IDs. The product map in
+   **Build Farmbrite order** comes from `PRODUCT_MAP` in the rewire script. It is
+   Cul2vate's catalogue, so replace it with yours.
+5. Paste the prompt. **Build vision request** holds the system prompt as a string.
+   Its source is `prompts/weight-estimation.md`, between `## SYSTEM PROMPT` and
+   `## END SYSTEM PROMPT`. The rewire script does this for you.
+6. Activate. Copy the production webhook URL into Vercel as `N8N_WEBHOOK_URL`.
 
-Open the **Vision: weight estimate** node → "System Message" field → paste the
-entirety of `prompts/weight-estimation.md` from the `## System prompt` header
-through end-of-file. (Or move it to a Set node if you prefer keeping prompt
-in workflow JSON.)
+## Check it
 
-## 5. Activate + test
+The workflow refuses a tap without a real frame, so a bare `curl` with only a
+description fails at **Build vision request**. Post a real JPEG instead:
 
-1. Activate the workflow.
-2. Copy the Production Webhook URL → paste into Vercel env as `N8N_WEBHOOK_URL`.
-3. `curl -X POST -H "X-Aperture-Token: $APERTURE_SHARED_TOKEN" \
-   -H "Content-Type: application/json" -d '{"description":"curl test"}' \
-   $N8N_WEBHOOK_URL`
-4. Verify: camera snapshot appears in execution log, vision JSON is valid,
-   Farmbrite returns 2xx, response shape matches what the PWA expects.
+```bash
+python3 scripts/vision-regression-test.py --e2e
+```
 
-## 6. Per-run observability
-
-Each execution logs the prompt version, camera snapshot (first 1KB), and
-Farmbrite response. The Phase 2 training loop reads from this execution
-history to compute residuals against ground-truth weights.
+That goes through the live relay and writes real records, then voids each one through
+`/api/void`. Voiding deletes the Farmbrite draft and drops the record from the CSV
+export. The Sheet row stays, labeled as a regression test. Once
+`APERTURE_DEVICE_TOKEN` is set, export it before you run the probe.

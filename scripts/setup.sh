@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Aperture — one-command bootstrap.
-# Run from ~/Desktop/Null\ Systems/business-framework/Active\ Projects/Branch\ Cam\ Testing/aperture/
+# Run from the repo root.
 #
 # Idempotent: re-run safely.
 #

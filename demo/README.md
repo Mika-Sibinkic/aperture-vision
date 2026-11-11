@@ -1,71 +1,78 @@
-# Aperture: static demo + accuracy harness
+# Aperture: offline demo and accuracy harness
 
-Built 2026-05-07 for the EnterpriseCo/the prospect contact meeting. Lives entirely on Mika's Mac;
-no Dell, n8n, or Hik-Connect dependency.
+This folder runs the deterministic part of the pipeline on two real frames from the
+Cul2vate dock camera. It needs no camera, no n8n and no API key.
 
-## What this demonstrates
+## What it does
 
-**Aperture's deterministic vision pipeline:** OpenCV ChArUco preprocessor
-computes pixels-per-inch from real geometry → vision call (gpt-4o) receives
-the calibration as an input rather than guessing → residual is computed
-against ground-truth weights captured on a kitchen scale.
+`charuco_preprocessor.py` finds the printed ChArUco board with OpenCV and computes
+pixels-per-inch from its known geometry. `harness.py` passes that number to the vision
+call as an input, so the model never has to guess the scale, then computes the residual
+against the true weight in `manifest.yaml`.
 
-The architecture matters more than the numbers. This is the static-mode v1
-pipeline. For EnterpriseCo's <500 ms in-motion conveyor target, see
-`docs/EnterpriseCo-conveyor-architecture.md`: same core, different sensors and
-runtime.
-
-## File layout
-
-```
-demo/
-├── charuco_preprocessor.py   # deterministic OpenCV ChArUco → ppi + bbox
-├── vision_provider.py        # OpenAI gpt-4o + stub provider
-├── harness.py                # main runner: image → ppi → vision → residual
-├── auto_detect_board.py      # brute-force dictionary detection on any board image
-├── manifest.yaml             # test set definition (image + true_weight_lbs)
-├── run_demo.sh               # one-line runner (creates venv + runs)
-├── test-images/              # IMG_0739 + Mika's kitchen captures
-├── output/                   # residuals.jsonl + accuracy-report.md
-└── KITCHEN-TEST-INSTRUCTIONS.md   # capture guide for Mika
-```
+With `--provider stub` there is no vision call. The stub always answers 0 lb, so a stub
+run tests the plumbing and the board detection, nothing else.
 
 ## Run it
 
 ```bash
-# from aperture/ repo root
-bash demo/run_demo.sh                          # auto-detects key, falls back to stub
-bash demo/run_demo.sh --provider openai        # explicit real run
-bash demo/run_demo.sh --provider stub          # plumbing-only
+bash demo/run_demo.sh --provider stub
 ```
 
-The `run_demo.sh` script auto-installs the demo venv on first run.
+The first run builds `demo/.venv` from `requirements.txt`. The report lands in
+`demo/output/accuracy-report.md` (gitignored).
 
-## ChArUco board parameters (auto-verified)
+```bash
+bash demo/run_demo.sh --provider openai
+```
 
-| Setting | Value | Source |
+That makes real gpt-4o calls. It needs `OPENAI_API_KEY` and it costs money.
+
+## What the board detection gets right and wrong
+
+On the two bundled frames, the preprocessor finds the board in one:
+
+| Frame | Markers found (of 40) | Result |
 |---|---|---|
-| Dictionary | `DICT_6X6_50` | `auto_detect_board.py` against `~/Downloads/Charuco Board 36x44 300dpi.png` |
-| Grid | 8 × 10 | 40 markers detected = 8×10/2 |
-| Square size | 4.0" | 32×40" pattern in 36×44" Dibond → 32/8 |
-| Pattern area | 32 × 40" | with 2" white border |
-| Total markers | 40 | one per checker square |
-| Total inner corners | 63 | (8-1)(10-1) |
+| `dock-empty-night-IR.jpg` | 27 | detected, 6.164 px/in, quality "poor" |
+| `IMG_0739.JPG` | 4 | not detected, too few corners |
 
-**Note:** The legacy `Food-Bank-Inventory-Management/generate_charuco_board.py`
-hardcoded `DICT_4X4_50` and 6" squares, which does NOT match the
-AlphaGraphics-printed board actually deployed at Cul2vate. Use this folder's
-defaults (DICT_6X6_50 / 4") for any new test set.
+Measured on 2026-11-11 with the pinned `requirements.txt` (OpenCV 4.13), one run per
+frame. The detector is deterministic, so a rerun gives the same table. The live
+workflow does not run this preprocessor. In production the board is only a scale
+reference the model can see in the frame.
 
-## What's NOT in this demo
+## Files
 
-By deliberate scope (so we ship before the call):
+| File | Role |
+|---|---|
+| `charuco_preprocessor.py` | OpenCV ChArUco detection, pixels-per-inch and board box |
+| `auto_detect_board.py` | Tries every ArUco dictionary on an image and reports marker counts |
+| `vision_provider.py` | gpt-4o provider and the offline stub |
+| `harness.py` | Image → preprocessor → vision → residual → report |
+| `manifest.yaml` | Test set: image plus true weight in lb |
+| `run_demo.sh` | Builds the venv and runs the harness |
+| `test-images/` | The two dock frames, both empty-zone controls |
+| `KITCHEN-TEST-INSTRUCTIONS.md` | How to shoot weighed items for a real accuracy set |
 
-- ChArUco _runtime_ recalibration (we trust the printed geometry)
-- Stereo / structured-light depth (single-RGB-camera v1)
-- Edge inference / quantized CNN (cloud gpt-4o is fine for static)
-- Conveyor / barcode-trigger (covered in `docs/EnterpriseCo-conveyor-architecture.md`)
-- NTEP certification (not the product positioning)
+## Board parameters
 
-These are the differences between static-mode v1 (this demo) and the EnterpriseCo
-production architecture. They are explicitly the scope of the 30-day pilot.
+| Setting | Value |
+|---|---|
+| Dictionary | `DICT_6X6_50` |
+| Grid | 8 × 10 squares |
+| Square size | 4.0 in |
+| Pattern area | 32 × 40 in, inside a 36 × 44 in print with a 2 in border |
+| Markers | 40 |
+| Inner corners | 63 |
+
+`auto_detect_board.py` picked `DICT_6X6_50` on both bundled frames. An older generator
+from the Branch prototype used `DICT_4X4_50` with 6 in squares, which does not match
+the board printed for Cul2vate.
+
+## Not in this demo
+
+- Runtime recalibration. The harness trusts the printed geometry.
+- Depth. It is a single RGB camera.
+- A weighed test set. Both bundled frames are empty-zone controls with a true weight of
+  0 lb, so this demo cannot measure weight error yet.
