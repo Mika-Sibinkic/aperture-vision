@@ -1,5 +1,9 @@
 # Aperture v2: determinism maximization agenda
 
+![Proposed v2 pipeline: an OpenCV ChArUco preprocessor feeding five specialist models and a deterministic weight formula](v2-architecture-proposed.png)
+
+*Proposed v2, not built.*
+
 The v1 architecture (single gpt-4o call + lookup tables + post-hoc bias) is
 shippable but leaves accuracy on the table. v2 redesigns the pipeline around
 two principles:
