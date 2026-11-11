@@ -17,6 +17,8 @@ jobs:
           python-version: "3.12"
       - name: n8n workflow JSON parses and carries no pinData (captured requests)
         run: python -c "import glob, json; bad = [f for f in glob.glob('n8n/*.json') if json.load(open(f)).get('pinData')]; assert not bad, bad"
+      - name: committed workflow has no token, credential id or Sheet id
+        run: python -c "import importlib.util as u; s = u.spec_from_file_location('rw', 'scripts/rewire-n8n-ipad-nim.py'); m = u.module_from_spec(s); s.loader.exec_module(m); leaks = m.unredacted(open('n8n/aperture-workflow-ipad-nim.json').read()); assert not leaks, leaks"
       - run: node scripts/test_farmbrite_match.js
       - run: node scripts/test_parse_vision.js
 

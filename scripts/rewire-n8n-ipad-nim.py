@@ -68,7 +68,12 @@ PARSE_NODE = "Parse vision + tare + bias"
 WEBHOOK_NODE = "Webhook: donation button"
 SHEET_NODE = "Append to Google Sheet"
 SHAPE_NODE = "Shape response"
+TOKEN_NODE = "Verify Token"
+ZONE_GUARD_NODE = "Guard: inside zone + has weight"
+# Dead since the Farmbrite write went live: the stub threw its input away and the
+# disabled guard had no inputs. The rewire deletes both.
 FARMBRITE_SKIP_NODE = "Farmbrite skipped (pending key)"
+FARMBRITE_GUARD_NODE = "Guard: Farmbrite configured"
 FARMBRITE_BUILD_NODE = "Build Farmbrite order"
 FARMBRITE_NODE = "Farmbrite: log order"
 FARMBRITE_GATE_NODE = "Farmbrite: has order?"
@@ -237,10 +242,14 @@ def farmbrite_build_code() -> str:
         "// better evidence than a generic classification like 'produce'.\n"
         "const candidates = [parsed.description, parsed.item_type]\n"
         "  .map(norm).filter((v) => v && v.length > 2);\n"
+        "// Exact name, singular or plural. A Ministry product is matched on the name after\n"
+        "// 'Ministry ' ('eggs', 'egg', 'chicken'), and only here, never by contains:\n"
+        "// 'beefsteak tomatoes' is not beef. [fixed 2026-11-11]\n"
+        "const one = (s) => s.replace(/s$/, '');\n"
         "let productId = null, productName = null;\n"
         "for (const wanted of candidates) {\n"
         "  for (const [name, id] of Object.entries(PRODUCTS)) {\n"
-        "    if (norm(name) === wanted) { productId = id; productName = name; break; }\n"
+        "    if (one(norm(name.replace(/^Ministry /, ''))) === one(wanted)) { productId = id; productName = name; break; }\n"
         "  }\n"
         "  if (productId) break;\n"
         "}\n"
@@ -248,7 +257,7 @@ def farmbrite_build_code() -> str:
         "// ('2 crates of kale' -> Kale). The text found inside a product name counts only\n"
         "// when exactly one product contains it: 'carrot' -> Carrots, while 'potatoes'\n"
         "// or 'tomato' fit several varieties and skip. [fixed 2026-11-11]\n"
-        "// Buckets are never contains-matched: 'produce' hit Community Garden Produce\n"
+        "// Buckets and Ministry products are never contains-matched: 'produce' hit Community Garden Produce\n"
         "// and every Seasonal month. Seasonal is only the explicit month fallback below.\n"
         "const BUCKET = /^(Seasonal Produce|Community Garden Produce|Mistake|Ministry )/;\n"
         "for (const wanted of candidates) {\n"
@@ -403,6 +412,41 @@ def parse_vision_code() -> str:
     )
 
 
+def shape_response_code() -> str:
+    """Code for the node whose output is the relay's whole view of a tap."""
+    return (
+        "// What the relay gets back. The iPad screen and the CSV read these fields.\n"
+        f"const parsed = $('{PARSE_NODE}').first().json;\n"
+        "// The incoming item is the Farmbrite order (the write is chained ahead of this\n"
+        "// node), or the builder's skip item when no order was posted.\n"
+        "const fb = $json;\n\n"
+        "const residualEst = (parsed.weight_lbs_high != null && parsed.weight_lbs_low != null)\n"
+        "  ? (parsed.weight_lbs_high - parsed.weight_lbs_low) / 2\n"
+        "  : null;\n\n"
+        "return [{ json: {\n"
+        "  weight_lbs: parsed.weight_lbs ?? null,\n"
+        "  weight_residual_est: residualEst,\n"
+        "  item_type: parsed.item_type ?? null,\n"
+        "  confidence: parsed.confidence ?? null,\n"
+        "  charuco_detected: parsed.charuco_detected ?? false,\n"
+        "  // Needed so an undo can delete the right draft.\n"
+        "  farmbrite_order_id: (fb && typeof fb.id === 'string') ? fb.id : null,\n"
+        "  container_type: parsed.container_type ?? null,\n"
+        "  container_count: parsed.container_count ?? null,\n"
+        "  container_fill_fraction: parsed.container_fill_fraction ?? null,\n"
+        "  tare_lbs: parsed.tare_lbs ?? null,\n"
+        "  weight_lbs_low: parsed.weight_lbs_low ?? null,\n"
+        "  weight_lbs_high: parsed.weight_lbs_high ?? null,\n"
+        "  implausible_weight: parsed.implausible_weight ?? false,\n"
+        "  prompt_version: parsed.prompt_version ?? null,\n"
+        "  model: parsed.model ?? null,\n"
+        "  // Set when the donation was logged to the Sheet but not to Farmbrite.\n"
+        "  farmbrite_skipped_reason: fb?.__skip === true ? (fb.reason ?? 'skipped') : null,\n"
+        "  notes: parsed.notes ?? null\n"
+        "}}];"
+    )
+
+
 def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     nodes = {n["name"]: n for n in wf["nodes"]}
     for required in (CONFIG_NODE, PARSE_NODE, WEBHOOK_NODE, VISION_NODE):
@@ -455,58 +499,18 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     nodes[PARSE_NODE]["parameters"]["jsCode"] = parse_vision_code()
 
     # Shape response is ALL the relay (and therefore the CSV and the iPad) ever sees,
-    # so anything worth logging or showing must be listed here explicitly.
-    shape = nodes.get(SHAPE_NODE)
-    # NOTE: each addition below is gated on ITS OWN marker. Gating the whole block
-    # on one field means later additions silently never apply — that bug has now
-    # bitten twice (node types, then farmbrite_order_id). [fixed 2026-08-02]
-    if shape and "farmbrite_order_id" not in shape["parameters"]["jsCode"]:
-        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
-            "  charuco_detected: parsed.charuco_detected ?? false,",
-            "  charuco_detected: parsed.charuco_detected ?? false,\n"
-            "  // Incoming item is the Farmbrite order (the write is chained ahead of\n"
-            "  // this node). Needed so an undo can delete the right draft.\n"
-            "  farmbrite_order_id: (fb && typeof fb.id === 'string') ? fb.id : null,",
-            1)
-    if shape and "container_count" not in shape["parameters"]["jsCode"]:
-        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
-            "  charuco_detected: parsed.charuco_detected ?? false,",
-            "  charuco_detected: parsed.charuco_detected ?? false,\n"
-            "  // Needed so /api/void can remove the right draft order on an undo.\n"
-            "  // The incoming item is the Farmbrite order itself now that the write is\n"
-            "  // chained ahead of this node. Needed so an undo can delete the draft.\n"
-            "  farmbrite_order_id: (fb && typeof fb.id === 'string') ? fb.id : null,\n"
-            "  container_type: parsed.container_type ?? null,\n"
-            "  container_count: parsed.container_count ?? null,\n"
-            "  container_fill_fraction: parsed.container_fill_fraction ?? null,\n"
-            "  tare_lbs: parsed.tare_lbs ?? null,\n"
-            "  weight_lbs_low: parsed.weight_lbs_low ?? null,\n"
-            "  weight_lbs_high: parsed.weight_lbs_high ?? null,\n"
-            "  implausible_weight: parsed.implausible_weight ?? false,\n"
-            "  prompt_version: parsed.prompt_version ?? null,\n"
-            "  model: parsed.model ?? null,",
-            1)
+    # so anything worth logging or showing must be listed here. Owned in full.
+    if SHAPE_NODE in nodes:
+        nodes[SHAPE_NODE]["parameters"]["jsCode"] = shape_response_code()
 
-    if shape:
-        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
-            "// Unified response shape for the PWA.",
-            "// What the relay gets back. The iPad screen and the CSV read these fields.", 1)
-    if shape and "farmbrite_skipped_reason" not in shape["parameters"]["jsCode"]:
-        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
-            "  farmbrite_pending: farmbriteSkipped,",
-            "  farmbrite_pending: farmbriteSkipped,\n"
-            "  // Set when the donation was logged to the Sheet but not to Farmbrite.\n"
-            "  farmbrite_skipped_reason: fb?.__skip === true ? (fb.reason ?? 'skipped') : null,",
-            1)
-
-    # Farmbrite: replace the "skipped (pending key)" stub with a real draft-order write.
-    skip = nodes.get(FARMBRITE_SKIP_NODE)
+    # Farmbrite: guard -> build order -> has order? -> log order -> Shape response.
     fb_cred = credential_id(wf, FARMBRITE_NODE, "N8N_FARMBRITE_CREDENTIAL_ID", ".n8n-farmbrite-credential-id")
-    if skip is not None and not fb_cred:
+    if not fb_cred:
         print(f"warning     -> no Farmbrite credential id; the Farmbrite nodes are left as they are. "
               f"Attach {FARMBRITE_CREDENTIAL_NAME!r} to {FARMBRITE_NODE!r} or export N8N_FARMBRITE_CREDENTIAL_ID.")
-    if skip is not None and fb_cred:
-        pos = skip.get("position", [0, 0])
+    if fb_cred:
+        # Only used when a node is created; existing nodes keep their position.
+        pos = (nodes.get(FARMBRITE_SKIP_NODE) or nodes.get(ZONE_GUARD_NODE) or {}).get("position", [0, 0])
         builder = {
             "id": str(uuid.uuid4()), "name": FARMBRITE_BUILD_NODE,
             "type": "n8n-nodes-base.code", "typeVersion": 2,
@@ -571,7 +575,11 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
         # being retrievable by id), so the id cannot be looked up after the fact.
         # Safe to chain: the writer is onError=continueRegularOutput + alwaysOutputData,
         # so Farmbrite being down still passes through to the response.
-        conns[FARMBRITE_SKIP_NODE] = {"main": [[{"node": FARMBRITE_BUILD_NODE, "type": "main", "index": 0}]]}
+        guard_out = conns.setdefault(ZONE_GUARD_NODE, {"main": [[], []]})["main"]
+        guard_out[0] = [{"node": FARMBRITE_BUILD_NODE, "type": "main", "index": 0}]
+        wf["nodes"] = [n for n in wf["nodes"] if n["name"] not in (FARMBRITE_SKIP_NODE, FARMBRITE_GUARD_NODE)]
+        conns.pop(FARMBRITE_SKIP_NODE, None)
+        conns.pop(FARMBRITE_GUARD_NODE, None)
         conns[FARMBRITE_BUILD_NODE] = {"main": [[{"node": FARMBRITE_GATE_NODE, "type": "main", "index": 0}]]}
         conns[FARMBRITE_GATE_NODE] = {"main": [[{"node": FARMBRITE_NODE, "type": "main", "index": 0}],
                                                [{"node": SHAPE_NODE, "type": "main", "index": 0}]]}
@@ -618,18 +626,52 @@ def put_body(wf: dict) -> dict:
     }
 
 
-def redacted_for_commit(wf: dict) -> str:
-    """Serialize the workflow with live tokens masked.
+TOKEN_PLACEHOLDER = "=REDACTED-see-SECRETS.local.md"
+SHEET_PLACEHOLDER = "=<google-sheet-id>"
+CREDENTIAL_PLACEHOLDER = "<n8n-credential-id>"
+TOKEN_RE = r"\b[0-9a-f]{64}\b"
 
-    The workflow carries APERTURE_SHARED_TOKEN inline (Verify Token node) and older
-    versions carried BRIDGE_TOKEN. Committed n8n JSON must never contain them — see
-    the secrets convention in CLAUDE.md. Backups keep the real values and are
-    gitignored, because a rollback needs them verbatim. Only the importable fields are
-    kept (put_body): pinData holds a captured webhook request with the caller's IP, and
-    activeVersion embeds a stale copy of the previous workflow.
+
+def redacted_for_commit(wf: dict) -> str:
+    """Serialize the workflow with every account identifier replaced by a placeholder.
+
+    Committed: the shared token in Verify Token, every credential id and the Sheet id
+    become placeholders, and any 64-hex string is masked as a backstop. Backups keep
+    the real values and are gitignored, because a rollback needs them verbatim. Only
+    the importable fields are kept (put_body): pinData holds a captured webhook
+    request with the caller's IP, and activeVersion embeds a stale copy of the
+    previous workflow.
     """
-    text = json.dumps(put_body(wf), indent=2)
-    return re.sub(r"\b[0-9a-f]{64}\b", "REDACTED-see-SECRETS.local.md", text)
+    body = json.loads(json.dumps(put_body(wf)))
+    for node in body["nodes"]:
+        for cred in (node.get("credentials") or {}).values():
+            cred["id"] = CREDENTIAL_PLACEHOLDER
+        params = node.get("parameters", {})
+        if node["name"] == TOKEN_NODE:
+            for cond in params.get("conditions", {}).get("conditions", []):
+                cond["rightValue"] = TOKEN_PLACEHOLDER
+        if node["name"] == SHEET_NODE and isinstance(params.get("documentId"), dict):
+            params["documentId"]["value"] = SHEET_PLACEHOLDER
+    return re.sub(TOKEN_RE, "REDACTED-see-SECRETS.local.md", json.dumps(body, indent=2))
+
+
+def unredacted(text: str) -> list[str]:
+    """What in a committed workflow file is still a real value. Empty means safe."""
+    wf = json.loads(text)
+    found = [f"64-hex token at offset {m.start()}" for m in re.finditer(TOKEN_RE, text)]
+    for node in wf["nodes"]:
+        for kind, cred in (node.get("credentials") or {}).items():
+            if cred.get("id") != CREDENTIAL_PLACEHOLDER:
+                found.append(f"{node['name']}: credential {kind} id")
+        params = node.get("parameters", {})
+        if node["name"] == TOKEN_NODE:
+            for cond in params.get("conditions", {}).get("conditions", []):
+                if cond.get("rightValue") != TOKEN_PLACEHOLDER:
+                    found.append(f"{TOKEN_NODE}: shared token")
+        if node["name"] == SHEET_NODE and isinstance(params.get("documentId"), dict):
+            if params["documentId"].get("value") != SHEET_PLACEHOLDER:
+                found.append(f"{SHEET_NODE}: Sheet id")
+    return found
 
 
 def verify(wf: dict) -> list[str]:
@@ -727,10 +769,12 @@ def main() -> None:
           "(no secrets, no dead hosts, refs resolve, critical path intact)")
 
     committed = REPO / "n8n" / "aperture-workflow-ipad-nim.json"
-    committed.write_text(redacted_for_commit(candidate))
-    if re.search(r"\b[0-9a-f]{64}\b", committed.read_text()):
-        sys.exit("ERROR: redaction failed — refusing to leave a token in a committed file.")
-    print("candidate   -> n8n/aperture-workflow-ipad-nim.json (tokens redacted for commit)")
+    text = redacted_for_commit(candidate)
+    leaks = unredacted(text)
+    if leaks:
+        sys.exit("ERROR: redaction failed, nothing written: " + "; ".join(leaks))
+    committed.write_text(text)
+    print("candidate   -> n8n/aperture-workflow-ipad-nim.json (token, credential and Sheet ids redacted)")
 
     if args.dry_run:
         print("dry-run     -> nothing pushed")

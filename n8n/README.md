@@ -1,12 +1,16 @@
 # n8n workflow
 
-Import `aperture-workflow-ipad-nim.json`. It has 18 nodes: the 17-node live workflow
-plus three changes from 2026-11-11 that are not deployed yet:
+Import `aperture-workflow-ipad-nim.json`. It has 16 nodes. The live workflow has 17,
+and none of the changes from 2026-11-11 below are deployed:
 
 - A Farmbrite fix. It adds **Farmbrite: has order?**, stops generic words like
   "potatoes" from matching a specific variety (a word still matches when exactly one
-  product contains it, so "carrot" finds Carrots), skips November-May loads that have
-  no Seasonal bucket, and returns `farmbrite_skipped_reason`.
+  product contains it, so "carrot" finds Carrots), matches Ministry products by the
+  name after "Ministry " ("eggs" finds Ministry Eggs), skips November-May loads that
+  have no Seasonal bucket, and returns `farmbrite_skipped_reason`. It deletes the dead
+  **Farmbrite skipped (pending key)** stub and the disabled **Guard: Farmbrite
+  configured**, and drops the always-false `farmbrite_pending` and the duplicate
+  `farmbrite_id` from the response.
 - Prompt v0.9-board, which gives the board's real 4 in square size. Live still runs
   v0.8-scene, which says 6 in.
 - The weight node (**Parse vision + tare + bias**, name kept so references hold) is
@@ -18,11 +22,16 @@ Until they are pushed, the live workflow has none of them.
 `scripts/rewire-n8n-ipad-nim.py` generates the file. It reads the live workflow over
 the n8n API, rewires it for the iPad and NVIDIA NIM, checks it, writes the redacted
 copy here (name, nodes, connections and settings only), then PUTs it back
-(`--dry-run` stops before the PUT, `--restore <backup>` rolls back). It needs
-`N8N_BASE_URL`, `N8N_API_KEY` and `N8N_WORKFLOW_ID` in the environment.
+(`--dry-run` stops before the PUT, `--restore <backup>` rolls back). The redacted copy
+has placeholders for the shared token, every credential id and the Sheet id; the
+script refuses to write it otherwise, and CI checks it. It needs `N8N_BASE_URL`,
+`N8N_API_KEY` and `N8N_WORKFLOW_ID` in the environment.
 
-The bridge-era workflows are in git history: `git log --all -- n8n/`. Every one of them
-fetched the frame through a camera bridge that no longer runs.
+Nine Sheet columns are constants kept for Cul2vate's existing Sheet: `tare_lbs`,
+`bias_multiplier`, `density_used`, `density_source`, `scale_reading_lbs`,
+`scale_confidence`, `true_weight_lbs`, `ground_truth_source` and
+`residual_vs_scale_lbs`. Nothing measures them. A fork can delete them from the
+template, the **Append to Google Sheet** mapping and `parse_vision_code()`.
 
 ## Set it up
 
@@ -38,9 +47,8 @@ Use native n8n nodes and n8n credentials. Keys never go in the workflow JSON.
    - Google Sheets OAuth2, on **Append to Google Sheet**. Put your sheet ID in place
      of `<google-sheet-id>`. The tab is named `Donations`.
    - `Farmbrite (Aperture)`: Header Auth, on **Farmbrite: log order**.
-4. Farmbrite runs on every tap with a positive weight. No n8n variable turns it off:
-   **Guard: Farmbrite configured** is disabled and nothing connects to it. To skip
-   Farmbrite, disable **Farmbrite: log order**. To use it, replace `PRODUCT_MAP` in
+4. Farmbrite runs on every tap with a positive weight. No n8n variable turns it off.
+   To skip Farmbrite, disable **Farmbrite: log order**. To use it, replace `PRODUCT_MAP` in
    `scripts/rewire-n8n-ipad-nim.py` with your products, then run the script. Edit it
    there, not in **Build Farmbrite order**: the next rewire overwrites the node.
    Farmbrite lists products at `GET https://api.farmbrite.com/v1/products` with the

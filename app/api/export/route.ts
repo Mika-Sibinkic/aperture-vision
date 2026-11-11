@@ -26,7 +26,6 @@ const LEAD = [
   "donation_id",
   "item_type",
   "weight_lbs",
-  "true_weight_lbs",
   "container_type",
   "container_count",
   "container_fill_fraction",

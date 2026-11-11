@@ -35,6 +35,14 @@ const cases = [
   ['', 'produce', NOV, null],
   ['', 'mixed produce', AUG, 'Seasonal Produce - August'],
   ['', 'potatoes', AUG, 'Seasonal Produce - August'],
+  // Ministry products match on the name after 'Ministry ', singular or plural.
+  // They used to skip (Nov) or land in Seasonal Produce (Aug), and 'egg' hit Eggplant.
+  ['', 'eggs', NOV, 'Ministry Eggs'],
+  ['', 'egg', NOV, 'Ministry Eggs'],
+  ['', 'chicken', AUG, 'Ministry Chicken'],
+  ['', 'eggplant', NOV, 'Eggplant'],
+  // Only by whole name: 'beefsteak' is a tomato, not Ministry Beef.
+  ['beefsteak tomatoes', 'tomatoes', AUG, 'Seasonal Produce - August'],
 ];
 
 let failed = 0;
