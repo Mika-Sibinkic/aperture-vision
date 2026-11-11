@@ -1,10 +1,15 @@
 # n8n workflow
 
 Import `aperture-workflow-ipad-nim.json`. It has 18 nodes: the 17-node live workflow
-plus one fix from 2026-11-11 that is not deployed yet. That fix adds **Farmbrite: has
-order?**, stops generic words like "potatoes" from matching a specific variety, skips
-November-May loads that have no Seasonal bucket, and returns `farmbrite_skipped_reason`.
-Until it is pushed, the live workflow has none of those.
+plus two changes from 2026-11-11 that are not deployed yet:
+
+- A Farmbrite fix. It adds **Farmbrite: has order?**, stops generic words like
+  "potatoes" from matching a specific variety, skips November-May loads that have no
+  Seasonal bucket, and returns `farmbrite_skipped_reason`.
+- Prompt v0.9-board, which gives the board's real 4 in square size. Live still runs
+  v0.8-scene, which says 6 in.
+
+Until they are pushed, the live workflow has neither.
 
 `scripts/rewire-n8n-ipad-nim.py` generates the file. It reads the live workflow over
 the n8n API, rewires it for the iPad and NVIDIA NIM, checks it, writes the redacted
@@ -12,8 +17,7 @@ copy here (name, nodes, connections and settings only), then PUTs it back
 (`--dry-run` stops before the PUT, `--restore <backup>` rolls back).
 
 The bridge-era workflows are in git history: `git log --all -- n8n/`. Every one of them
-fetched the frame through a camera bridge that no longer runs. The legacy PWA in
-`app/page.tsx` posts no image, so it only worked against those.
+fetched the frame through a camera bridge that no longer runs.
 
 ## Set it up
 

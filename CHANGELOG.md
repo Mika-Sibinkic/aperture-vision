@@ -1,30 +1,56 @@
 # Changelog: Aperture
 
-> State: stable · Optionality: low · Open to Change: append-only. Format: [Keep a Changelog](https://keepachangelog.com). Entries before 2026-06-10 reconstructed during Git migration from checkpoint logs, file timestamps, Pocket recordings, and Notion records.
+Format: [Keep a Changelog](https://keepachangelog.com). Entries before 2026-06-10 are reconstructed from file timestamps.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-11
+First public release. The system has run at Cul2vate since the first live taps on 2026-08-02. This release closes the gaps in the relay that a public URL would expose.
+
+### Security
+- Every `/api/*` route checks the `x-aperture-token` header against `APERTURE_DEVICE_TOKEN` with a constant-time compare and returns 401 on a miss. The check stays open while the variable is unset, so the live iPad keeps working until the token is rolled out. The iPad build and `scripts/vision-regression-test.py` send the header.
+- CSV export prefixes `'` on any cell that starts with `=`, `+`, `-`, `@`, tab or CR, so Sheets and Excel do not run dock text as a formula.
+
+### Fixed
+- `/api/donate` no longer logs an n8n reply that carries an `error` (n8n answers 200 when it refuses the shared token). It returns 502, deletes the archived photo and writes no record.
+- iPad: a build set up through the Keychain derives the export and undo URLs from the relay URL instead of placeholders, and the system check shows a failed undo as its own step.
+- Prompt v0.9-board: the board has 4 in squares, not the 6 in that v0.8 stated. Committed only, not yet run against NIM or deployed.
+- `/api/donate` keeps a client `donation_id` only when it is a UUID, coerces `description` to a string, and takes the blob date from a parsed timestamp. A numeric `description` used to return an empty-body 500.
+- Duplicate donations: a retried tap whose first attempt is still running gets a 409 and never reaches n8n a second time. When n8n fails or returns nothing, the archived photo is deleted so the retry goes through.
+- Undo marks a record voided only after the Farmbrite draft is deleted or none exists. A failed delete returns 502, keeps `farmbrite_void_error`, and the next undo retries it. The fallback lookup lists drafts and matches `ref <id>` exactly. `/api/void` rejects ids that are not UUIDs.
+- CSV export returns 500 when any record fails to read, instead of a 200 with rows missing.
+
+### Removed
+- The legacy PWA (it posted no image and sent no device token), `/api/correct` (no caller, no workflow), `training-loop/` (nothing read its output, and its evaluator scored a different model from production), `public/bias-table.json`, `public/learned-state/`, `data/avg-weights.json` and `data/containers.json`. All are in git history.
+
+### Changed
+- `.env.example` lists exactly the five variables the app reads.
+- `scripts/vision-regression-test.py` reads `RELAY` from `scripts/make-ipad-script.py`, so a fork sets its URL in one place.
+- `data/donations-sheet-template.csv` has the columns the workflow writes.
+- Removed the `lint` script. Next 16 dropped `next lint` and the repo has no ESLint config.
+- Added vitest tests for the relay routes (`npm test`).
+
+## 2026-06-10 to 2026-08-02: Live deployment at Cul2vate
 - **First live capture from the mounted camera (2026-08-02): chain proven.** iPad system check passed on the dock: camera → relay → vision → Sheet → Farmbrite. The last unverified hop in the system is verified on real hardware.
-- **Prompt v0.7-zone: fixes a confident false positive on the real camera.** The first live frame returned "banana box, 50 lbs" on an EMPTY staging zone (night infrared, cluttered dock around the tape). Now: only goods inside the tape count, defaulting to a common container is forbidden, monochrome/IR is expected, and "unidentified" is an allowed answer. Verified: real frame → empty/0 lb, positive control still returns goods.
+- **Prompt v0.7-zone: fixes a confident false positive on the real camera.** The first live frame returned "banana box, 50 lbs" on an empty staging zone (night infrared, cluttered dock around the tape). Now: only goods inside the tape count, defaulting to a common container is forbidden, monochrome/IR is expected, and "unidentified" is an allowed answer. Verified: real frame → empty/0 lb, positive control still returns goods.
 - **Negative control replaced with a real camera frame** (`demo/test-images/dock-empty-night-IR.jpg`), the exact frame that failed.
 - Fixed: the regression suite was pinned to a model production does not use; it now reads the production model.
-- Farmbrite live (2026-08-02): each tap writes a Draft order (`product_id` + `qty` in pounds). Verified against the real account and cleaned up; order count back to 489. Non-blocking: Farmbrite down cannot fail a tap.
+- Farmbrite live (2026-08-02): each tap writes a Draft order (`product_id` + `qty` in pounds). Verified against the real account and cleaned up. Non-blocking: Farmbrite down cannot fail a tap.
 - Tare removed (prompt v0.6-net): v0.5 double-subtracted containers. The model's food-only weight is now the logged number; the fuzzy container lookup is out of the weight path. 60/60/60 lb across three runs of the same image.
-- **Pre-handoff audit:** one on-site blocker (camera IP is DHCP and needs a reservation), plus four open risks: no alerting, NIM free credits, a personal Farmbrite token, and accuracy not validated against a scale.
+- **Pre-handoff audit:** one on-site blocker (camera IP is DHCP and needs a reservation), plus four open risks: no alerting, NIM free credits, a user-scoped Farmbrite token, and accuracy not validated against a scale.
 - Training corpus live (2026-07-28): every tap now archives the exact frame to a **private** Vercel Blob store (`donations/YYYY-MM-DD/<donation_id>.jpg`) and logs `image_url` + `image_sha256` beside the prediction in the Google Sheet. Photos were previously discarded, so no donation could ever become training data. Archiving is non-blocking: a storage failure records `archive_error` and the tap still succeeds.
-- **Verified: Aperture has NEVER had an Azure Cosmos DB.** Zero references across every saved workflow version; the Cosmos DB belongs to the Branch Cam prototype (Phase 0, Antioch, ~Dec 2025 to Jan 2026).
 - Farmbrite: mapped the live API from outside without a token. Base `https://api.farmbrite.com/v1`; `inventory_types`, `products`, `crops`, `animals`, `contacts`, `tasks`, `transactions`, `orders` all exist (401), others 404. `scripts/farmbrite-setup.py` auto-detects the auth header and find-or-creates the "Aperture Donations" inventory type. Blocked only on the API token.
-- Production chain LIVE (2026-07-28): Vercel prod relay → n8n (rewired) → NVIDIA NIM `llama-3.2-90b-vision-instruct` → Google Sheet. Verified end-to-end from off-site: 200 in 11.5 s, Sheet row written, all nodes green. Only the iPad→camera LAN hop remains unexercised.
+- Production chain live (2026-07-28): Vercel prod relay → n8n (rewired) → NVIDIA NIM `llama-3.2-90b-vision-instruct` → Google Sheet. Verified end-to-end from off-site: 200 in 11.5 s, Sheet row written, all nodes green. Only the iPad→camera LAN hop remains unexercised.
 - Vision prompt v0.4-nim fixes a severe parroting bug: v0.3's filled-in example JSON caused the model to echo `48.4 lbs / conf 0.82` on a REAL empty dock. Types-only schema + anti-parrot rule + mandatory `response_format: json_object`. Regression suite (`scripts/vision-regression-test.py`) covers both an empty-dock negative control and a real-produce positive control.
 - No always-on server: Dell/VPS both rejected. Every always-on piece is a managed service; capture happens on the iPad at tap time (`docs/decisions/2026-07-28-no-always-on-server.md`).
 - Zero-typing on-site install: `scripts/make-ipad-script.py` emits a pre-configured (gitignored) iPad build; `selftest` mode proves every hop in one tap; `camera-access/ipad/ONSITE-CARD.md` is the 4-step card.
 - Tooling: `scripts/rewire-n8n-ipad-nim.py` (backup → verify → PUT → readback → `--restore`). Guards two n8n traps: in-place node-type changes are silently ignored, and credentials must live in the workflow's project.
 - Security hygiene: untracked `.env.production.local` (held an expired Vercel OIDC token).
-- **Camera path DECIDED (2026-07-22): iPad on-tap LAN pull of the mounted Hikvision.** Keeps the installed camera, no new hardware, no Mac. `camera-access/ipad/aperture-pull.js` (Scriptable HTTP-Digest client, verified vs RFC 2617) pulls the ISAPI frame at the tap → posts to the relay → n8n → NIM vision → Sheet. Relay `app/api/donate/route.ts` gains a backward-compatible `image_b64` passthrough. On-site ~10-min install runbook + decision record shipped. Fallbacks: low-cost LAN box; Hik-Partner Pro OpenAPI (parallel).
-- Camera-path correction (2026-07-22): Hik-Connect cloud-pull is VERIFIED DEAD for this camera (pyezviz/pyezvizapi empty device list; hikconnect lib no capture method). Mounted Hikvision is LAN-only. The Dell/pyezviz bridge steps are superseded.
+- **Camera path decided (2026-07-22): iPad on-tap LAN pull of the mounted Hikvision.** Keeps the installed camera, no new hardware, no Mac. `camera-access/ipad/aperture-pull.js` (Scriptable HTTP-Digest client, verified vs RFC 2617) pulls the ISAPI frame at the tap → posts to the relay → n8n → NIM vision → Sheet. Relay `app/api/donate/route.ts` gains a backward-compatible `image_b64` passthrough. On-site ~10-min install runbook + decision record shipped. Fallbacks: low-cost LAN box; Hik-Partner Pro OpenAPI (parallel).
+- Camera-path correction (2026-07-22): Hik-Connect cloud-pull did not work for this camera (pyezviz/pyezvizapi empty device list; hikconnect lib no capture method). Mounted Hikvision is LAN-only. The Dell/pyezviz bridge steps are superseded.
 - Vision provider: standardized on NVIDIA NIM (OpenAI-compatible, open VLM) replacing the dry OpenAI node; `bridge/bridge.py` `/v1` gateway injects the upstream key server-side (n8n holds only BRIDGE_TOKEN).
 - Accuracy method portfolio (docs/ACCURACY-ROADMAP.md): SKU scanning, training data, OCR, priors, scale-in-the-loop, hybrid routing. No single method presumed; >=95% reliable is the gate
 - Reality baseline (2026-06-10): image model only; training data not yet attached; target = Cul2vate loading-dock produce.
-- Cul2vate Mac→Dell bridge migration (Phases 2-5; paused since 2026-04-18, awaiting the client contact's camera serial + Farmbrite creds and a Dell RustDesk session)
 - Farmbrite write path (gated on API key; workflow guard-skips to "Farmbrite skipped (pending key)")
 - Kitchen-test capture set for accuracy report (KITCHEN-TEST-INSTRUCTIONS.md; only IMG_0739 so far)
 
@@ -32,7 +58,7 @@
 ### Added
 - Static-mode demo: deterministic OpenCV ChArUco pipeline, harness, stub + OpenAI providers (`demo/`)
 - Deploy containers: Dockerfile.bridge, Dockerfile.demo, compose, QUICKSTART (`deploy/`)
-- Auto-detected deployed board params: DICT_6X6_50, 8×10, 4.0" squares (legacy generator did NOT match)
+- Auto-detected deployed board params: DICT_6X6_50, 8×10, 4.0" squares (the legacy generator did not match)
 
 ## 2026-04-20: README architecture + resume guide
 

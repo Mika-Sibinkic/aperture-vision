@@ -1,15 +1,14 @@
 ---
 choice: iPad on-tap LAN pull of the mounted Hikvision (Scriptable digest client)
-tier: 2
 date: 2026-07-22
 status: accepted
 alternatives_considered:
   - name: $75 always-on LAN mini-PC / Pi running mac_bridge.py
-    reject_reason: Needs new hardware + an on-site drop; Mika wants no added hardware and it up ASAP. Kept as the fallback if the iPad pull fails on-site.
+    reject_reason: Needs new hardware and an on-site drop. I wanted no new hardware and the camera live quickly. Kept as the fallback if the iPad pull fails on-site.
   - name: iPad's own camera (volunteer photographs the donation)
-    reject_reason: Abandons the installed board+camera+injector+wall run (large sunk cost) and changes the imaging device; Mika explicitly rejected shipping only the iPad camera.
+    reject_reason: Abandons the installed board+camera+injector+wall run (large sunk cost) and changes the imaging device; I ruled out shipping only the iPad camera.
   - name: Hik-Connect / EZVIZ cloud pull (pyezviz on the Dell)
-    reject_reason: VERIFIED DEAD for this camera; pyezviz/pyezvizapi see an empty device list; hikconnect lib has no capture method.
+    reject_reason: Did not work for this camera: pyezviz/pyezvizapi see an empty device list; hikconnect lib has no capture method.
   - name: Hik-Partner Pro OpenAPI (cloud capture-by-serial)
     reject_reason: Official + no hardware, but blocked on partner OpenAPI AK/SK credential approval (~days). Pursue in parallel as the eventual hands-off cloud path; not a "now".
   - name: Keep Mac bridge on the Cul2vate LAN
@@ -29,10 +28,10 @@ verification_probe: |
   `node -e` require the script and check md5/buildDigestAuth vs the RFC vector
   (6629fae49393a05397450978507c4ef1); passes.
 rollback:
-  commit_sha: bd519cf
+  commit: "feat(camera): iPad on-tap LAN bridge for the mounted Hikvision" (2026-07-22)
   steps:
     - Revert app/api/donate/route.ts image_b64 passthrough (git revert of this change set)
-    - Leave the mounted-camera path unused; fall back to the $75 LAN mini-PC (camera-access/README.md Option A)
+    - Leave the mounted-camera path unused; fall back to a LAN mini-PC running the bridge, which is in git history (`git log --all -- bridge/`)
     - n8n vision node: revert base URL from NIM back to prior OpenAI credential if changed
 superseded_by:
 ---
@@ -40,9 +39,9 @@ superseded_by:
 ## Context
 
 The mounted Hikvision at the Cul2vate dock is LAN-only; Hik-Connect cloud-pull is
-verified dead for this camera; Mika is off-site with nothing on the Cul2vate LAN,
-but wants the mounted camera (not the iPad's own camera, not new hardware) live
-ASAP, the way the 2026-04-17 on-site demo worked. The iPad is already on that LAN
+did not work for this camera. I was off-site with nothing on the Cul2vate LAN, and
+I wanted the mounted camera (not the iPad's own camera, not new hardware) live
+quickly, the way the 2026-04-17 on-site demo worked. The iPad is already on that LAN
 and is already the button-press front end.
 
 ## Decision

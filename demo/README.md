@@ -55,6 +55,7 @@ reference the model can see in the frame.
 | `harness.py` | Image → preprocessor → vision → residual → report |
 | `manifest.yaml` | Test set: image plus true weight in lb |
 | `run_demo.sh` | Builds the venv and runs the harness |
+| `test_charuco.py` | pytest: the detector's result on both bundled frames |
 | `test-images/` | The two dock frames, both empty-zone controls |
 
 ## Board parameters

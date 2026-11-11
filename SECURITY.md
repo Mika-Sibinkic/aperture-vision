@@ -2,7 +2,7 @@
 
 ## Report a problem
 
-Email TODO-MIKA-SECURITY-CONTACT. Do not open a public issue for a vulnerability.
+Use GitHub private vulnerability reporting: open this repo's **Security** tab, then **Report a vulnerability**. Do not open a public issue.
 
 ## What is secret
 
@@ -13,7 +13,7 @@ Email TODO-MIKA-SECURITY-CONTACT. Do not open a public issue for a vulnerability
 
 ## The device-token check is open until you set it
 
-Every `/api/*` route checks the `x-aperture-token` header against `APERTURE_DEVICE_TOKEN`. While that variable is unset, the routes accept any caller and log a warning. This keeps the live iPad working until it gets a build that sends the token. Set the variable in Vercel as soon as your iPad build sends it. The legacy PWA in `app/` sends no token, so it stops working once the variable is set.
+Every `/api/*` route checks the `x-aperture-token` header against `APERTURE_DEVICE_TOKEN`. While that variable is unset, the routes accept any caller and log a warning. This keeps the live iPad working until it gets a build that sends the token. Set the variable in Vercel as soon as your iPad build sends it.
 
 ## Known advisory left in place
 

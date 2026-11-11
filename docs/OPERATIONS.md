@@ -1,10 +1,9 @@
-# Aperture: operations & developer capability
+# Aperture: operations
 
-> State: live · Optionality: low · Open to Change: yes. This file is the single
-> authoritative answer to "what is running right now, and what can I change without
-> driving to the site?". Update it in the same session as any architecture change.
+What runs, what I can change without driving to the site, and what breaks on its own.
 
-Last verified: **2026-08-02**.
+Last verified live: **2026-08-02**. The device token check (added 2026-11-11) has not
+been checked live.
 
 ---
 
@@ -15,8 +14,9 @@ Last verified: **2026-08-02**.
 | Capture | Hikvision AcuSense <device-serial>, ISAPI digest over LAN at `<camera-ip>` | Cul2vate dock | frames pulled 2026-06-15 |
 | Trigger | Scriptable script on the on-site iPad, foreground at tap time | iPad | iPad → camera hop verified on the dock 2026-08-02 (system check) |
 | Relay | Next.js route `/api/donate` (archives photo, forwards, writes record) | Vercel, `<vercel-app-host>` | live |
+| Relay auth | device token `APERTURE_DEVICE_TOKEN`, sent as `x-aperture-token` | Vercel env | open until the variable is set |
 | Orchestration | n8n workflow `<n8n-workflow-id>`, **17 nodes**, active | n8n Cloud, project **Main** | live |
-| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.8-scene** | NIM (hosted) | 9.8-12.5 s per tap |
+| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.8-scene** (v0.9-board is committed, not deployed) | NIM (hosted) | 9.8-12.5 s per tap |
 | Log | Google Sheet `Donations` | Google | live |
 | Photo + record store | Vercel Blob, **private** store `<blob-store>` | Vercel | live |
 | Export | `/api/export` → CSV (`?format=json`, `?since=YYYY-MM-DD`) | Vercel | live |
@@ -47,8 +47,6 @@ Everything below is reachable from any machine with this repo and the credential
 - Anything physical: camera aim/power, the ChArUco board, the tape, the injector.
 - The **router** (DHCP reservation, Wi-Fi).
 - **First** install of the iPad script, and the iPad's power/Wi-Fi/Guided Access.
-
-That is the entire list. There is no remote-desktop dependency anywhere.
 
 ---
 
@@ -105,9 +103,8 @@ been done to make them as good as possible without ground truth:
 - A >2000 lb flag: any reading over 2000 lb gets `implausible_weight_review`. It flags
   the reading for review and does not block the write.
 
-None of that establishes error tolerance. Until real weights flow through
-`/api/correct`, treat the numbers as **operational record and trend**, not audited
-poundage.
+None of that establishes error tolerance. Until loads are weighed on a scale and
+compared, treat the numbers as **operational record and trend**, not audited poundage.
 
 ---
 
@@ -118,11 +115,11 @@ poundage.
 | NVIDIA NIM free credits | every tap fails (401/429) | swap the n8n vision credential to another provider |
 | Camera DHCP lease (unless reserved) | every tap fails, "can't reach the camera" | reserve the IP on the Eero |
 | Google Sheets OAuth in n8n | Sheet rows stop; photo + record still safe | re-authorise the n8n credential |
-| Farmbrite token (a personal user token) | Farmbrite entries stop; taps unaffected | move to a dedicated integration user |
+| Farmbrite token (a user-scoped token) | Farmbrite entries stop; taps unaffected | move to a dedicated integration user |
 | Vercel Blob free tier (~1 GB ≈ 4,000 photos) | archiving stops, `archive_error` set; taps unaffected | prune old photos or upgrade |
 | n8n Cloud monthly execution cap | **all taps fail** | verify the plan's ceiling against volume |
 
-Nothing currently alerts on any of these. That is the largest sustainability gap.
+Nothing currently alerts on any of these.
 
 ---
 
@@ -182,12 +179,12 @@ python3 scripts/rewire-n8n-ipad-nim.py --restore n8n/backups/<file>.json
 python3 scripts/make-ipad-script.py
 
 # inspect / refresh Farmbrite
-export FARMBRITE_API_KEY='...'      # SECRETS.local.md
+read -rs FARMBRITE_API_KEY && export FARMBRITE_API_KEY
 python3 scripts/farmbrite-setup.py
 
 # ship relay changes
 npm run build && vercel --prod --yes
 
 # the running log
-curl https://<vercel-app-host>/api/export -o donations.csv
+curl -H "x-aperture-token: $APERTURE_DEVICE_TOKEN" https://<vercel-app-host>/api/export -o donations.csv
 ```

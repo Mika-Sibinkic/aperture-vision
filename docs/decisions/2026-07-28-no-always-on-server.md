@@ -1,6 +1,5 @@
 ---
 choice: Run Aperture with no self-managed always-on server (no Dell G7, no VPS)
-tier: 2
 date: 2026-07-28
 status: accepted
 alternatives_considered:
@@ -26,7 +25,7 @@ alternatives_considered:
 corroborating_signals:
   - Live end-to-end run 2026-07-28 through Vercel prod -> n8n Cloud -> NIM -> Google Sheet, HTTP 200 in 11.5s
   - scripts/vision-regression-test.py --e2e - both controls pass against production
-  - CHANGELOG.md, camera-path correction 2026-07-22 - Hik-Connect cloud pull verified dead; ISAPI-on-LAN is the only capture path
+  - CHANGELOG.md, camera-path correction 2026-07-22 - Hik-Connect cloud pull did not work; ISAPI-on-LAN is the only capture path
   - Prior outages both traced to self-managed pieces (Mac bridge died 2026-04-17; cloudflared quick tunnels went NXDOMAIN)
 confidence:
   primary_claim: VERIFIED      # full chain exercised against production, twice, both controls
@@ -36,7 +35,7 @@ verification_probe: |
   Expect: negative control -> empty/0 lb, positive control -> goods + a computed weight,
   "ALL CONTROLS PASSED". Any component being down surfaces here without touching the site.
 rollback:
-  commit_sha: 0bfd10a
+  commit: "feat(prod): production chain live on NIM; zero servers; one-tap on-site install" (2026-07-28)
   steps:
     - python3 scripts/rewire-n8n-ipad-nim.py --restore n8n/backups/<timestamp>.json
     - Redeploy the previous Vercel production deployment from the dashboard (instant rollback)
@@ -46,8 +45,8 @@ superseded_by:
 
 ## Context
 
-Mika asked what should host Aperture always-on for production: the Dell G7, a VPS,
-or something else. Every prior outage at Cul2vate came from a self-managed piece:
+The question was what should host Aperture always-on for production: a spare laptop
+(Dell G7), a VPS, or something else. Every prior outage at Cul2vate came from a self-managed piece:
 the Mac bridge died when the Mac left the site, and the cloudflared quick tunnels
 went NXDOMAIN. The Dell was in the plan only because the camera needed a relay.
 
@@ -67,6 +66,10 @@ volunteer's hand:
 | Vision (`llama-3.2-90b-vision-instruct`) | NVIDIA NIM | managed |
 | Donation log | Google Sheets | managed |
 | Camera capture | iPad, foreground, at the tap | on-site, on the LAN |
+
+Since then the model moved to `nvidia/nemotron-nano-12b-v2-vl` (see
+`prompts/weight-estimation.md`), tare was removed, and the PWA was deleted. The
+no-server decision is unchanged.
 
 Nothing to keep running, nothing to restart, no tunnel, no systemd unit, no box that
 can be off when someone walks up to donate.
