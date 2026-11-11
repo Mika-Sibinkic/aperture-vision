@@ -65,6 +65,7 @@ SHAPE_NODE = "Shape response"
 FARMBRITE_SKIP_NODE = "Farmbrite skipped (pending key)"
 FARMBRITE_BUILD_NODE = "Build Farmbrite order"
 FARMBRITE_NODE = "Farmbrite: log order"
+FARMBRITE_GATE_NODE = "Farmbrite: has order?"
 FARMBRITE_URL = "https://api.farmbrite.com/v1/orders"
 FARMBRITE_CREDENTIAL_NAME = "Farmbrite (Aperture)"
 
@@ -231,32 +232,30 @@ def farmbrite_build_code() -> str:
         "  }\n"
         "  if (productId) break;\n"
         "}\n"
+        "// Contains-match, longest name wins. Only a product name found INSIDE the text\n"
+        "// counts ('2 crates of kale' -> Kale). The reverse let a generic word pick a\n"
+        "// variety: 'potatoes' -> Adirondack Blue Potatoes. [fixed 2026-11-11]\n"
+        "// Buckets are never contains-matched: 'produce' hit Community Garden Produce\n"
+        "// and every Seasonal month. Seasonal is only the explicit month fallback below.\n"
+        "const BUCKET = /^(Seasonal Produce|Community Garden Produce|Mistake|Ministry )/;\n"
         "for (const wanted of candidates) {\n"
         "  if (productId) break;\n"
-        "  {\n"
-        "  if (!productId) {                       // contains-match, longest name wins\n"
-        "    // Seasonal buckets are EXCLUDED here: a generic item_type like 'produce'\n"
-        "    // substring-matches every 'Seasonal Produce - <Month>' entry and would pick\n"
-        "    // an arbitrary (wrong) month. They are only ever used as the explicit\n"
-        "    // current-month fallback below. [fixed 2026-08-02]\n"
-        "    let best = 0;\n"
-        "    for (const [name, id] of Object.entries(PRODUCTS)) {\n"
-        "      if (name.startsWith('Seasonal Produce')) continue;\n"
-        "      const n = norm(name);\n"
-        "      if (n && (n.includes(wanted) || wanted.includes(n)) && n.length > best) {\n"
-        "        best = n.length; productId = id; productName = name;\n"
-        "      }\n"
+        "  let best = 0;\n"
+        "  for (const [name, id] of Object.entries(PRODUCTS)) {\n"
+        "    if (BUCKET.test(name)) continue;\n"
+        "    const n = norm(name);\n"
+        "    if (n && wanted.includes(n) && n.length > best) {\n"
+        "      best = n.length; productId = id; productName = name;\n"
         "    }\n"
-        "  }\n"
         "  }\n"
         "}\n"
         "// Fall back to the month bucket Cul2vate already uses for mixed loads.\n"
+        "// No bucket exists for Nov-May yet, so those loads skip with a reason.\n"
+        "const bucket = 'Seasonal Produce - ' + MONTHS[new Date().getMonth()];\n"
+        "if (!productId && PRODUCTS[bucket]) { productId = PRODUCTS[bucket]; productName = bucket; }\n"
         "if (!productId) {\n"
-        "  const bucket = 'Seasonal Produce - ' + MONTHS[new Date().getMonth()];\n"
-        "  if (PRODUCTS[bucket]) { productId = PRODUCTS[bucket]; productName = bucket; }\n"
-        "}\n"
-        "if (!productId) {\n"
-        "  return [{ json: { __skip: true, reason: 'no product match and no month bucket' } }];\n"
+        "  return [{ json: { __skip: true, reason: 'no Farmbrite product named in \"' +\n"
+        "    (parsed.description || parsed.item_type || '') + '\" and no \"' + bucket + '\" product' } }];\n"
         "}\n\n"
         "const today = new Date().toISOString().slice(0, 10);\n"
         "return [{ json: {\n"
@@ -510,6 +509,14 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
             "  model: parsed.model ?? null,",
             1)
 
+    if shape and "farmbrite_skipped_reason" not in shape["parameters"]["jsCode"]:
+        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
+            "  farmbrite_pending: farmbriteSkipped,",
+            "  farmbrite_pending: farmbriteSkipped,\n"
+            "  // Set when the donation was logged to the Sheet but not to Farmbrite.\n"
+            "  farmbrite_skipped_reason: fb?.__skip === true ? (fb.reason ?? 'skipped') : null,",
+            1)
+
     # Farmbrite: replace the "skipped (pending key)" stub with a real draft-order write.
     skip = nodes.get(FARMBRITE_SKIP_NODE)
     fb_cred = (REPO / ".n8n-farmbrite-credential-id")
@@ -540,11 +547,27 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
             "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 1000,
             "alwaysOutputData": True,
         }
+        # A skipped item has no order_body; posting it would create an empty order or
+        # an error. Route it straight to Shape response, which reports the reason.
+        gate = {
+            "id": str(uuid.uuid4()), "name": FARMBRITE_GATE_NODE,
+            "type": "n8n-nodes-base.if", "typeVersion": 2,
+            "position": [pos[0] + 100, pos[1] + 320],
+            "parameters": {"conditions": {
+                "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 1},
+                "conditions": [{
+                    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "aperture/farmbrite-gate")),
+                    "operator": {"type": "boolean", "operation": "true"},
+                    "leftValue": "={{ $json.__skip !== true }}",
+                }],
+                "combinator": "and",
+            }, "options": {}},
+        }
         # Idempotent: refresh the parameters of nodes that already exist rather than
         # only creating them once. Otherwise a fix to the builder code silently never
         # reaches the live workflow on a re-run. [fixed 2026-08-02]
         by_name = {n["name"]: n for n in wf["nodes"]}
-        for node in (builder, writer):
+        for node in (builder, gate, writer):
             current = by_name.get(node["name"])
             if current is None:
                 wf["nodes"].append(node)
@@ -565,7 +588,9 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
         # Safe to chain: the writer is onError=continueRegularOutput + alwaysOutputData,
         # so Farmbrite being down still passes through to the response.
         conns[FARMBRITE_SKIP_NODE] = {"main": [[{"node": FARMBRITE_BUILD_NODE, "type": "main", "index": 0}]]}
-        conns[FARMBRITE_BUILD_NODE] = {"main": [[{"node": FARMBRITE_NODE, "type": "main", "index": 0}]]}
+        conns[FARMBRITE_BUILD_NODE] = {"main": [[{"node": FARMBRITE_GATE_NODE, "type": "main", "index": 0}]]}
+        conns[FARMBRITE_GATE_NODE] = {"main": [[{"node": FARMBRITE_NODE, "type": "main", "index": 0}],
+                                               [{"node": SHAPE_NODE, "type": "main", "index": 0}]]}
         conns[FARMBRITE_NODE] = {"main": [[{"node": SHAPE_NODE, "type": "main", "index": 0}]]}
 
     # 2) Sheet: log the photo pointer alongside the prediction.
@@ -664,6 +689,8 @@ def verify(wf: dict) -> list[str]:
         problems.append(f"{BUILD_NODE} does not feed {VISION_NODE}")
     if PARSE_NODE not in targets(VISION_NODE):
         problems.append(f"{VISION_NODE} does not feed {PARSE_NODE}")
+    if FARMBRITE_NODE in targets(FARMBRITE_BUILD_NODE):
+        problems.append(f"{FARMBRITE_BUILD_NODE} feeds {FARMBRITE_NODE} directly; skipped items would be posted")
 
     vision = next((n for n in wf["nodes"] if n["name"] == VISION_NODE), None)
     if not vision or vision.get("type") != "n8n-nodes-base.httpRequest":
