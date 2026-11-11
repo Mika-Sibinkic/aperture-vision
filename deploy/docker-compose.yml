@@ -11,8 +11,6 @@
 #   cp deploy/.env.example deploy/.env       # fill in the slots marked ⇨
 #   docker compose -f deploy/docker-compose.yml up -d aperture-bridge
 #   docker compose -f deploy/docker-compose.yml run --rm aperture-demo
-version: "3.9"
-
 services:
   aperture-bridge:
     build:
@@ -23,7 +21,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"   # host-local only; the tunnel fronts it
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8002/healthz', timeout=5).read(); sys.exit(0)"]
       interval: 30s

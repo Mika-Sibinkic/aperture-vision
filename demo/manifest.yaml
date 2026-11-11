@@ -9,7 +9,7 @@
 #   2. weigh the item, record true_weight_lbs to two decimals
 #   3. add an entry below
 #
-# `board:` defaults match the Cul2vate deployed board (8x10 grid, 6" squares).
+# `board:` defaults match the Cul2vate deployed board (8x10 grid, 4" squares).
 # Override per-test if Mika prints a different board for the kitchen run.
 
 image_dir: test-images
@@ -23,13 +23,21 @@ board:
   # Pattern: 8×10 grid of 4" squares (32×40" pattern, 2" white border).
 
 images:
-  # ── Cul2vate live camera frame ─────────────────────────────────────────────
+  # ── Cul2vate live camera frames ────────────────────────────────────────────
   - filename: IMG_0739.JPG
     description: |
       Hikvision RTSP feed at Cul2vate dock. Empty staging zone (yellow tape).
       ChArUco board on brick wall. Items in foreground (boxes/bucket) are
       OUTSIDE the staging zone — should report inside_zone=false, weight=null.
     true_weight_lbs: 0.0   # baseline empty-zone control
+    is_control: true
+
+  - filename: dock-empty-night-IR.jpg
+    description: |
+      Mounted camera frame at night (IR, 2026-08-01). Empty staging zone.
+      Crates, a bucket and a produce box sit OUTSIDE the zone. The frame the
+      old prompt read as "banana box, 50 lbs".
+    true_weight_lbs: 0.0
     is_control: true
 
   # ── Kitchen test set (Mika populates) ──────────────────────────────────────

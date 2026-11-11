@@ -144,6 +144,13 @@ def update(
     return rec, violations
 
 
+def read_table(path: pathlib.Path) -> dict[str, DensityRecord]:
+    """Load a table written by write_table."""
+    if not path.exists():
+        return {}
+    return {k: DensityRecord(item_type=k, **v) for k, v in json.loads(path.read_text())["densities"].items()}
+
+
 def write_table(records: dict[str, DensityRecord], out_path: pathlib.Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

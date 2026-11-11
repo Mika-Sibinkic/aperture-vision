@@ -18,12 +18,13 @@ from __future__ import annotations
 import io
 import logging
 import os
+import secrets
 import sys
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, Response, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Response, Request
 from fastapi.responses import JSONResponse
 from pyezviz import EzvizClient, EzvizCamera
 
@@ -41,6 +42,8 @@ LISTEN_PORT        = int(os.environ.get("LISTEN_PORT", "8002"))
 # n8n authenticates to this bridge with BRIDGE_TOKEN only.
 VISION_UPSTREAM_BASE = os.environ.get("VISION_UPSTREAM_BASE", os.environ.get("OLLAMA_BASE", "http://localhost:11434"))
 VISION_UPSTREAM_KEY  = os.environ.get("VISION_UPSTREAM_KEY", "")
+if BRIDGE_TOKEN.startswith("CHANGE_ME") or len(BRIDGE_TOKEN) < 32:
+    sys.exit("BRIDGE_TOKEN is a placeholder or under 32 chars. Generate one: openssl rand -hex 32")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,6 +110,10 @@ def _fetch_snapshot() -> bytes:
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
+def _authorized(authorization: str) -> bool:
+    return secrets.compare_digest(authorization.encode(), f"Bearer {BRIDGE_TOKEN}".encode())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -124,17 +131,15 @@ def healthz():
     """Liveness probe. Cloudflare/uptime monitors hit this."""
     try:
         _ensure_session()
-        return {"status": "ok", "camera_serial": CAMERA_SERIAL[:4] + "***"}
-    except Exception as e:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "degraded", "error": str(e)},
-        )
+        return {"status": "ok"}
+    except Exception:
+        log.exception("healthz: ezviz session failed")
+        return JSONResponse(status_code=503, content={"status": "degraded"})
 
 
 @app.get("/snapshot")
 def snapshot(authorization: str = Header(default="")):
-    if authorization != f"Bearer {BRIDGE_TOKEN}":
+    if not _authorized(authorization):
         raise HTTPException(status_code=401, detail="invalid bearer token")
     try:
         jpeg = _fetch_snapshot()
@@ -158,7 +163,7 @@ def snapshot_with_scale(authorization: str = Header(default="")):
         "scale_confidence": 0.91, "scale_raw_text": "47.3 lb" }
     """
     import base64
-    if authorization != f"Bearer {BRIDGE_TOKEN}":
+    if not _authorized(authorization):
         raise HTTPException(status_code=401, detail="invalid bearer token")
     try:
         jpeg = _fetch_snapshot()
@@ -171,10 +176,13 @@ def snapshot_with_scale(authorization: str = Header(default="")):
 
     # Local lazy import — keeps /snapshot cold-start fast even if cv2 is missing
     try:
-        from scale_ocr import extract_weight
+        try:
+            from scale_ocr import extract_weight
+        except ImportError:                    # run as a package: uvicorn bridge.bridge:app
+            from bridge.scale_ocr import extract_weight
         reading = extract_weight(jpeg)
-    except ImportError:
-        log.warning("snapshot_with_scale: scale_ocr unavailable — returning image without scale reading")
+    except Exception as e:
+        log.warning("snapshot_with_scale: scale OCR unavailable (%s) — returning image without it", e)
         reading = None
 
     payload = {
@@ -188,18 +196,24 @@ def snapshot_with_scale(authorization: str = Header(default="")):
     return JSONResponse(content=payload)
 
 
+async def _raw_body(request: Request) -> bytes:
+    return await request.body()
+
+
+# Plain def: FastAPI runs it in the threadpool, so a 180 s upstream call
+# doesn't block /snapshot.
 @app.api_route("/v1/{path:path}", methods=["GET", "POST"])
-async def ollama_openai_proxy(path: str, request: Request, authorization: str = Header(default="")):
+def ollama_openai_proxy(path: str, request: Request, body: bytes = Depends(_raw_body),
+                        authorization: str = Header(default="")):
     """Secure OpenAI-compatible vision gateway. Forwards /v1/* to the LOCAL Ollama
     (localhost:11434), gated by the same bridge bearer token, so Ollama is never
     exposed to the internet. n8n's vision node points here:
       base URL = https://<bridge-host>/v1 , key = BRIDGE_TOKEN , model = qwen2.5vl:3b
     """
-    if authorization != f"Bearer {BRIDGE_TOKEN}":
+    if not _authorized(authorization):
         raise HTTPException(status_code=401, detail="invalid bearer token")
     import requests as _rq
     url = VISION_UPSTREAM_BASE.rstrip("/") + "/v1/" + path
-    body = await request.body()
     fwd_headers = {"Content-Type": request.headers.get("content-type", "application/json")}
     if VISION_UPSTREAM_KEY:                     # inject hosted-provider key server-side
         fwd_headers["Authorization"] = f"Bearer {VISION_UPSTREAM_KEY}"

@@ -27,22 +27,26 @@ die()  { printf "  ${R}✗${N} %s\n" "$*"; exit 1; }
 [[ -n "${N8N_API_KEY:-}" ]] || die "N8N_API_KEY not set. source .env from framework root."
 [[ -n "${N8N_BASE_URL:-}" ]] || die "N8N_BASE_URL not set."
 
+# Private scratch dir: the workflow JSON carries live tokens.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
 say "0. Preflight — Dell bridge must be reachable"
-code=$(curl -sS -o /tmp/_h -w "%{http_code}" --max-time 10 "https://bridge.example.com/healthz")
+code=$(curl -sS -o "$tmp/h" -w "%{http_code}" --max-time 10 "https://bridge.example.com/healthz")
 if [[ "$code" != "200" ]]; then
-  cat /tmp/_h
+  cat "$tmp/h"
   die "Dell bridge /healthz returned HTTP $code. Fix bridge before cutting over."
 fi
-pass "bridge OK: $(cat /tmp/_h)"
+pass "bridge OK: $(cat "$tmp/h")"
 
 say "1. Pull current workflow"
 curl -sS --max-time 15 -H "X-N8N-API-KEY: $N8N_API_KEY" \
-  "$N8N_BASE_URL/workflows/$WORKFLOW_ID" -o /tmp/_wf.json
+  "$N8N_BASE_URL/workflows/$WORKFLOW_ID" -o "$tmp/wf.json"
 
 set +e
 python3 - <<PY
 import json, sys
-wf = json.load(open('/tmp/_wf.json'))
+wf = json.load(open('$tmp/wf.json'))
 print(f"  workflow={wf['name']!r}  active={wf['active']}  nodes={len(wf['nodes'])}")
 fs = next((n for n in wf['nodes'] if n['name']=='Fetch snapshot + scale OCR (via Bridge)'), None)
 if not fs:
@@ -69,7 +73,7 @@ fi
 say "2. Patch fetch URL in local copy"
 python3 - <<PY
 import json
-wf = json.load(open('/tmp/_wf.json'))
+wf = json.load(open('$tmp/wf.json'))
 fs = next(n for n in wf['nodes'] if n['name']=='Fetch snapshot + scale OCR (via Bridge)')
 fs['parameters']['url'] = "$DELL_URL"
 # n8n public API PUT is strict: body = {name,nodes,connections,settings}, and
@@ -79,29 +83,29 @@ ALLOWED = {"saveExecutionProgress","saveManualExecutions","saveDataErrorExecutio
            "saveDataSuccessExecution","executionTimeout","errorWorkflow","timezone","executionOrder"}
 settings = {k: v for k, v in (wf.get('settings') or {}).items() if k in ALLOWED} or {"executionOrder": "v1"}
 payload = {"name": wf["name"], "nodes": wf["nodes"], "connections": wf["connections"], "settings": settings}
-json.dump(payload, open('/tmp/_wf_patched.json','w'), indent=2)
+json.dump(payload, open('$tmp/wf_patched.json','w'), indent=2)
 print(f"  patched URL to: {fs['parameters']['url']}")
 print(f"  settings kept: {sorted(settings)}")
 PY
 
 say "3. PUT back via API"
-code=$(curl -sS -o /tmp/_put -w "%{http_code}" --max-time 20 \
+code=$(curl -sS -o "$tmp/put" -w "%{http_code}" --max-time 20 \
   -X PUT -H "X-N8N-API-KEY: $N8N_API_KEY" \
   -H "Content-Type: application/json" \
   "$N8N_BASE_URL/workflows/$WORKFLOW_ID" \
-  --data-binary @/tmp/_wf_patched.json)
+  --data-binary @"$tmp/wf_patched.json")
 if [[ "$code" != "200" ]]; then
-  cat /tmp/_put | head -c 500
+  cat "$tmp/put" | head -c 500
   die "PUT returned HTTP $code"
 fi
 pass "workflow updated"
 
 say "4. Verify round-trip"
 curl -sS --max-time 10 -H "X-N8N-API-KEY: $N8N_API_KEY" \
-  "$N8N_BASE_URL/workflows/$WORKFLOW_ID" -o /tmp/_wf_verify.json
+  "$N8N_BASE_URL/workflows/$WORKFLOW_ID" -o "$tmp/wf_verify.json"
 python3 - <<PY
 import json, sys
-wf = json.load(open('/tmp/_wf_verify.json'))
+wf = json.load(open('$tmp/wf_verify.json'))
 fs = next(n for n in wf['nodes'] if n['name']=='Fetch snapshot + scale OCR (via Bridge)')
 url = fs['parameters']['url']
 if "bridge.example.com" not in url:
@@ -122,7 +126,6 @@ else
   warn "preflight returned unexpected payload — inspect n8n executions"
 fi
 
-rm -f /tmp/_wf.json /tmp/_wf_patched.json /tmp/_wf_verify.json /tmp/_put /tmp/_h
 say "Cutover complete."
 echo ""
 echo "  Next: tap the iPad with tomatoes in the crate."

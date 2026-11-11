@@ -85,7 +85,7 @@ def update(
     if prior and prior.using_learned:
         capped, v = clamp_delta_pct(
             prior.multiplier, clamped,
-            max_delta_pct=5.0,
+            max_delta_pct=cfg["max_per_cycle_delta_pct"],
             rule_name=f"bias[{item_type}].per_cycle_delta",
         )
         if v: violations.append(v)
@@ -100,6 +100,16 @@ def update(
     )
     log.info("bias[%s]: multiplier=%.3f (raw %.3f, n=%d)", item_type, clamped, raw, len(relevant))
     return rec, violations
+
+
+def read_table(path: pathlib.Path) -> dict[str, BiasRecord]:
+    """Load a table written by write_table. Every entry in it was learned."""
+    if not path.exists():
+        return {}
+    return {
+        k: BiasRecord(item_type=k, multiplier=float(m), n_samples=0, last_updated="", using_learned=True)
+        for k, m in json.loads(path.read_text()).items()
+    }
 
 
 def write_table(records: dict[str, BiasRecord], out_path: pathlib.Path) -> None:

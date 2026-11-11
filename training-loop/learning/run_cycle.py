@@ -35,7 +35,7 @@ from . import bias_learner, density_learner, ensemble_weights, ground_truth, she
 from .ground_truth import GroundTruthEvent
 from .safeguards import detect_convergence_to_self
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 LEARNING_DIR = pathlib.Path(__file__).resolve().parent
 STATE_DIR = LEARNING_DIR / "state"
 PUBLIC_STATE_DIR = REPO_ROOT / "public" / "learned-state"
@@ -157,6 +157,12 @@ def cycle_once(sheet_id: str, dry_run: bool = False) -> dict:
     # gracefully falls back to baseline when volume is missing.
     # TODO v1.1: surface estimated_volume_cu_in from the parse-vision node
     # and write it to the Sheet so the learner has real volume data.
+
+    # Last cycle's published tables are the priors, so the per-cycle clamps apply.
+    bias_path = REPO_ROOT / "public" / "bias-table.json"
+    prior_densities = density_learner.read_table(PUBLIC_STATE_DIR / "learned-densities.json")
+    prior_biases = bias_learner.read_table(bias_path)
+
     densities: dict[str, density_learner.DensityRecord] = {}
     measured_volumes: dict[str, float] = {}  # donation_id → cu_in — v1.1 will populate
     item_types = {e.item_type for e in all_events if e.item_type}
@@ -169,6 +175,7 @@ def cycle_once(sheet_id: str, dry_run: bool = False) -> dict:
                 measured_volumes_cu_in=measured_volumes,
                 baseline=baseline,
                 config=config,
+                prior=prior_densities.get(item_type),
             )
             densities[item_type] = rec
             summary["violations"].extend([v.__dict__ for v in viols])
@@ -183,6 +190,7 @@ def cycle_once(sheet_id: str, dry_run: bool = False) -> dict:
                 item_type=item_type,
                 events=all_events,
                 config=config,
+                prior=prior_biases.get(item_type),
             )
             biases[item_type] = rec
             summary["violations"].extend([v.__dict__ for v in viols])
@@ -193,7 +201,7 @@ def cycle_once(sheet_id: str, dry_run: bool = False) -> dict:
 
     # Stage 5: write state files
     density_learner.write_table(densities, PUBLIC_STATE_DIR / "learned-densities.json")
-    bias_learner.write_table(biases, REPO_ROOT / "public" / "bias-table.json")
+    bias_learner.write_table(biases, bias_path)
 
     # Stage 6: ensemble weights (neutral for v1 — real update at v2.0+)
     if not (PUBLIC_STATE_DIR / "ensemble-weights.json").exists():
@@ -202,13 +210,14 @@ def cycle_once(sheet_id: str, dry_run: bool = False) -> dict:
     # Stage 7: git commit + push
     if not dry_run:
         try:
+            # Only the published tables. state/ holds raw Sheet rows and stays on the box
+            # (gitignored); the next cycle reads its priors from these tables.
             subprocess.run(["git", "-C", str(REPO_ROOT), "add",
-                            "public/learned-state/", "public/bias-table.json",
-                            f"Active Projects/Branch Cam Testing/aperture/training-loop/learning/state/"],
+                            "public/learned-state/", "public/bias-table.json"],
                            check=True, capture_output=True)
-            status = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
-                                    capture_output=True, text=True, check=True)
-            if status.stdout.strip():
+            # Only what was just staged counts; untracked files elsewhere must not trigger a commit.
+            staged = subprocess.run(["git", "-C", str(REPO_ROOT), "diff", "--cached", "--quiet"])
+            if staged.returncode:
                 subprocess.run(["git", "-C", str(REPO_ROOT), "commit",
                                 "-m", f"[Aperture] learning cycle — {len(new_events)} new ground-truth, {len(item_types)} classes updated"],
                                check=True, capture_output=True)
