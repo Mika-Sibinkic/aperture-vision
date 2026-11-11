@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import { deviceAuth } from "../../lib/deviceAuth";
 
 export const runtime = "nodejs";
@@ -71,6 +71,19 @@ async function archivePhoto(
     // donation_id, so it means an earlier attempt of the same tap already got this far.
     if (/already exists/i.test(error)) return { ...empty, error, duplicate: true };
     return { ...empty, error };
+  }
+}
+
+/**
+ * Delete the archived photo when n8n produced no record, so the iPad's retry with the
+ * same donation_id is not turned away as a duplicate. Best effort, like the archive.
+ */
+async function releasePhoto(archive: ArchiveResult) {
+  if (!archive.url) return;
+  try {
+    await del(archive.url);
+  } catch {
+    /* the retry then gets a 409, which is the old behaviour */
   }
 }
 
@@ -164,6 +177,7 @@ export async function POST(req: NextRequest) {
 
     const text = await resp.text();
     if (!resp.ok) {
+      await releasePhoto(archive);
       return NextResponse.json(
         { error: `n8n ${resp.status}: ${text.slice(0, 500)}` },
         { status: 502 }
@@ -195,9 +209,13 @@ export async function POST(req: NextRequest) {
       const detail = text.trim().length
         ? text.slice(0, 500)
         : "n8n closed the request without a response — a workflow node failed. Check the n8n execution log.";
+      await releasePhoto(archive);
       return NextResponse.json({ error: detail }, { status: 502 });
     }
   } catch (e) {
+    // On our own timeout n8n may still finish and log the tap, so keep the photo and
+    // let the retry get a 409. Any other fetch error means n8n never answered.
+    if (!controller.signal.aborted) await releasePhoto(archive);
     const msg = e instanceof Error ? e.message : "unknown";
     return NextResponse.json({ error: `fetch failed: ${msg}` }, { status: 504 });
   } finally {

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { put } = vi.hoisted(() => ({
+const { put, del } = vi.hoisted(() => ({
   put: vi.fn(async (pathname: string, _body?: unknown, _opts?: unknown) => ({ url: `https://blob.test/${pathname}` })),
+  del: vi.fn(async (_url: string) => {}),
 }));
-vi.mock("@vercel/blob", () => ({ put, list: vi.fn() }));
+vi.mock("@vercel/blob", () => ({ put, del, list: vi.fn() }));
 
 import { POST as donate } from "../donate/route";
 
@@ -23,6 +24,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", n8n);
   vi.spyOn(console, "warn").mockImplementation(() => {});
   put.mockClear();
+  del.mockClear();
 });
 
 afterEach(() => {
@@ -87,5 +89,51 @@ describe("duplicate taps", () => {
     const res = await post({ donation_id: "0b8e1c52-6f0a-4c1e-9d2b-3a4f5e6d7c8b", image_b64: PHOTO });
     expect(res.status).toBe(200);
     expect(n8n).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a failed n8n call does not block the retry", () => {
+  const ID = "0b8e1c52-6f0a-4c1e-9d2b-3a4f5e6d7c8b";
+
+  // A Blob fake that refuses a second write to a path, like the real store, until it is deleted.
+  beforeEach(() => {
+    const stored = new Set<string>();
+    put.mockImplementation(async (pathname: string) => {
+      if (stored.has(pathname)) throw new Error("Vercel Blob: This blob already exists");
+      stored.add(pathname);
+      return { url: `https://blob.test/${pathname}` };
+    });
+    del.mockImplementation(async (url: string) => {
+      stored.delete(url.replace("https://blob.test/", ""));
+    });
+  });
+
+  it.each([
+    ["n8n 500", () => new Response("node threw", { status: 500 })],
+    ["empty n8n body", () => new Response("")],
+    ["n8n unreachable", () => Promise.reject(new TypeError("fetch failed"))],
+  ])("%s: the photo is released and the retry reaches n8n", async (_label, firstReply) => {
+    n8n.mockImplementationOnce(firstReply);
+    const first = await post({ donation_id: ID, image_b64: PHOTO });
+    expect(first.status).toBeGreaterThanOrEqual(500);
+
+    const retry = await post({ donation_id: ID, image_b64: PHOTO });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ weight_lbs: 12.5 });
+    expect(n8n).toHaveBeenCalledTimes(2);
+  });
+
+  it("a timeout keeps the photo, because n8n may still log the first attempt", async () => {
+    vi.useFakeTimers();
+    // n8n never answers, so the relay's own 100 s timer aborts the call.
+    n8n.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    const first = post({ donation_id: ID, image_b64: PHOTO });
+    await vi.advanceTimersByTimeAsync(100_000);
+    vi.useRealTimers();
+    expect((await first).status).toBe(504);
+    expect((await post({ donation_id: ID, image_b64: PHOTO })).status).toBe(409);
+    expect(del).not.toHaveBeenCalled();
   });
 });
