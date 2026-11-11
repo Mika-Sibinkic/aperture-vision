@@ -8,10 +8,9 @@ prediction at inference time.
 
 Safety:
   - Classes with < MIN_SAMPLES residuals are omitted (stay at 1.0).
-  - Any single-week movement > MAX_DELTA is clamped + flagged, requiring
-    manual approval before propagation (per CLAUDE.md anti-hallucination).
-  - The current live table is read back in to compare against; delta warnings
-    print to stderr.
+  - A class's multiplier moves at most --max-delta (fraction) from the live
+    value per run; capped moves print a warning to stderr. The cap is
+    learning/safeguards.clamp_delta_pct, the same one the daily cycle uses.
 
 Usage:
   python3 build_bias_table.py
@@ -25,6 +24,8 @@ import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+from learning.safeguards import clamp_delta_pct
 
 ROOT = Path(__file__).resolve().parent
 RESIDUAL_LOG = ROOT / "residuals.jsonl"
@@ -45,7 +46,7 @@ def build_table(min_samples: int) -> tuple[dict[str, float], dict[str, dict]]:
     """Returns (table, stats). table is {class: multiplier}. stats for reporting."""
     groups: dict[str, list[tuple[float, float]]] = defaultdict(list)  # (true, pred) pairs
     for r in load_residuals():
-        if r.get("weight_lbs_true") and r.get("weight_lbs_pred"):
+        if r.get("weight_lbs_true") is not None and r.get("weight_lbs_pred") is not None:
             key = normalize_class(r.get("item_type_label"))
             groups[key].append((float(r["weight_lbs_true"]), float(r["weight_lbs_pred"])))
 
@@ -81,14 +82,10 @@ def clamp_deltas(new: dict[str, float], current: dict[str, float], max_delta: fl
         if cur is None:
             out[k] = v
             continue
-        delta = abs(v - cur) / max(abs(cur), 1e-6)
-        if delta > max_delta:
-            # Move halfway — conservative step.
-            clamped = (v + cur) / 2
-            warnings.append(f"{k}: {cur:.3f} → wanted {v:.3f} (delta {delta*100:.0f}%), clamped to {clamped:.3f}")
-            out[k] = round(clamped, 4)
-        else:
-            out[k] = v
+        capped, violation = clamp_delta_pct(cur, v, max_delta * 100, f"bias_table[{k}]")
+        if violation:
+            warnings.append(f"{k}: {cur:.3f} → wanted {v:.3f} ({violation.detail}), capped at {capped:.3f}")
+        out[k] = round(capped, 4)
     # Carry over classes that weren't re-sampled but were live.
     for k, v in current.items():
         out.setdefault(k, v)
