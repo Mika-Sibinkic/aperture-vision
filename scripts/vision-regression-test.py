@@ -36,11 +36,13 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 RELAY_URL = "https://<vercel-app-host>/api/donate"
+VOID_URL = RELAY_URL.replace("/api/donate", "/api/void")
 def production_model() -> str:
     """Read the model production actually uses, so this suite can never silently test
     a different one (it was pinned to llama-3.2-90b while production ran nemotron)."""
@@ -117,20 +119,37 @@ def ask_nim(image: bytes, key: str, desc: str = "—") -> dict:
     return json.loads(re.sub(r"^```(?:json)?|```$", "", content.strip(), flags=re.M).strip())
 
 
+def relay_headers() -> dict:
+    return {"Content-Type": "application/json",
+            "x-aperture-token": os.environ.get("APERTURE_DEVICE_TOKEN", "")}
+
+
 def ask_relay(image: bytes, label: str) -> dict:
     # "phantom" cases must send a real item name, since that is the thing under test.
     desc = "Kale" if "phantom" in label else f"REGRESSION TEST — {label}"
+    donation_id = str(uuid.uuid4())   # ours, so the probe can void exactly what it logged
     body = json.dumps({"description": desc, "image_b64": base64.b64encode(image).decode(),
                        "triggered_at": "2026-01-01T00:00:00Z", "location": "Cul2vate, Ellington Ag Center",
-                       "source": "aperture-regression"}).encode()
-    headers = {"Content-Type": "application/json",
-               "x-aperture-token": os.environ.get("APERTURE_DEVICE_TOKEN", "")}
-    req = urllib.request.Request(RELAY_URL, data=body, headers=headers)
+                       "donation_id": donation_id, "source": "aperture-regression"}).encode()
+    req = urllib.request.Request(RELAY_URL, data=body, headers=relay_headers())
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
-            return json.load(resp)
+            result = json.load(resp)
     except urllib.error.HTTPError as exc:
-        return {"error": exc.read()[:300].decode(errors="replace")}
+        result = {"error": exc.read()[:300].decode(errors="replace")}
+    result.setdefault("donation_id", donation_id)
+    return result
+
+
+def void_relay(result: dict) -> None:
+    """A probe is a real tap: void it so it leaves no CSV row or Farmbrite draft.
+    The Google Sheet row stays (n8n owns it); its description marks it as a test."""
+    body = json.dumps({"donation_id": result["donation_id"], "reason": "vision regression probe"}).encode()
+    try:
+        urllib.request.urlopen(urllib.request.Request(VOID_URL, data=body, headers=relay_headers()), timeout=90)
+        print("  cleanup: voided")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f"  ! cleanup failed ({exc}); void {result['donation_id']} by hand")
 
 
 def parroting(result: dict) -> bool:
@@ -145,6 +164,7 @@ def main() -> None:
     key = None if args.e2e else nim_key()
     ask = (lambda img, label: ask_relay(img, label)) if args.e2e else (
         lambda img, label: ask_nim(img, key, "Kale" if "phantom" in label else "—"))
+    cleanup = void_relay if args.e2e else (lambda res: None)
     print(f"target: {'live relay ' + RELAY_URL if args.e2e else 'NIM ' + MODEL}\n")
 
     failures = 0
@@ -164,6 +184,7 @@ def main() -> None:
             print("  ✓ PASS")
         else:
             print(f"  ✗ FAIL: invented a donation on an empty dock"); failures += 1
+        cleanup(res)
 
     print("\nPOSITIVE control — real produce photo (must find goods + a weight)")
     positive = fetch_positive()
@@ -179,6 +200,7 @@ def main() -> None:
             print("  ✗ FAIL: model is biased to 'empty' — it would log 0 lb for real donations"); failures += 1
         else:
             print("  ✓ PASS")
+        cleanup(res)
 
     # The realistic dock failure: a volunteer types the item, then taps before the
     # load is staged. The description must never conjure goods into an empty zone.
@@ -191,6 +213,7 @@ def main() -> None:
             print("  ✓ PASS")
         else:
             print("  ✗ FAIL: the typed description created goods in an empty zone"); failures += 1
+        cleanup(res)
 
     print("\n" + ("ALL CONTROLS PASSED ✅" if failures == 0 else f"{failures} CONTROL(S) FAILED ❌"))
     sys.exit(1 if failures else 0)
