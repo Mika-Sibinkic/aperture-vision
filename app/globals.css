@@ -2,9 +2,9 @@
   --bg: #f7f4ee;
   --card: #ffffff;
   --ink: #2a2925;
-  --muted: #7a7268;
-  --accent: #86b187;
-  --accent-pressed: #6b9b6e;
+  --muted: #6f675d;
+  --accent: #5a8a5d;
+  --accent-pressed: #4f7f52;
   --danger: #c24848;
   --warn: #d19a3e;
   --border: #e7e2d6;
@@ -71,7 +71,7 @@ textarea.note {
   -webkit-user-select: text;
   user-select: text;
 }
-textarea.note::placeholder { color: #a89f92; }
+textarea.note::placeholder { color: var(--muted); }
 
 .trigger {
   appearance: none;
@@ -96,6 +96,8 @@ textarea.note::placeholder { color: #a89f92; }
   flex-direction: column;
   gap: 10px;
   justify-content: center;
+  -webkit-user-select: text;   /* so an error can be copied into a message */
+  user-select: text;
 }
 .status .row {
   display: flex;
@@ -106,7 +108,7 @@ textarea.note::placeholder { color: #a89f92; }
 .status .k { color: var(--muted); font-size: 14px; letter-spacing: 0; text-transform: none; }
 .status .v { font-size: 18px; font-weight: 500; }
 .status .headline { font-size: 44px; font-weight: 700; letter-spacing: -0.5px; }
-.status .ok { color: var(--accent); }
+.status .ok { color: var(--accent-pressed); }
 .status .err { color: var(--danger); }
 .status .warn { color: var(--warn); }
 .status .muted { color: var(--muted); font-size: 14px; }
@@ -118,6 +120,10 @@ textarea.note::placeholder { color: #a89f92; }
   animation: spin 0.9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
 
 .footer {
   margin-top: auto;

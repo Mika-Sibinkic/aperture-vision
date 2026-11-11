@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Aperture",
-    statusBarStyle: "black-translucent"
+    statusBarStyle: "default"
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",
@@ -23,8 +23,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: "#f7f4ee"
 };
 
