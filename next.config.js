@@ -12,20 +12,6 @@ const nextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "no-referrer" }
         ]
-      },
-      {
-        source: "/sw.js",
-        headers: [
-          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
-          { key: "Service-Worker-Allowed", value: "/" }
-        ]
-      },
-      {
-        source: "/bias-table.json",
-        headers: [
-          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
-          { key: "Access-Control-Allow-Origin", value: "*" }
-        ]
       }
     ];
   }

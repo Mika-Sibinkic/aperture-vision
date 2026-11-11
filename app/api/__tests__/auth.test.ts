@@ -9,7 +9,6 @@ vi.mock("@vercel/blob", () => ({
 import { POST as donate } from "../donate/route";
 import { POST as voidRoute } from "../void/route";
 import { GET as exportRoute } from "../export/route";
-import { POST as correct } from "../correct/route";
 
 const TOKEN = "device-secret-123";
 
@@ -27,7 +26,6 @@ const routes = [
   ["donate", () => donate, "/api/donate", "POST"],
   ["void", () => voidRoute, "/api/void", "POST"],
   ["export", () => exportRoute, "/api/export", "GET"],
-  ["correct", () => correct, "/api/correct", "POST"],
 ] as const;
 
 let n8n: ReturnType<typeof vi.fn>;

@@ -15,9 +15,7 @@ type IncomingBody = {
   description?: unknown;
   triggered_at?: unknown;
   location?: string;
-  // Optional base64 JPEG captured on-device (iPad LAN pull of the mounted
-  // Hikvision, or the iPad's own camera). When present, n8n uses this frame
-  // instead of fetching from a bridge. Absent for the legacy PWA path.
+  // Base64 JPEG the iPad pulled from the mounted camera. n8n refuses a tap without it.
   image_b64?: string;
   source?: string;
   donation_id?: unknown;
