@@ -12,8 +12,8 @@ pip install -r training-loop/requirements.txt pytest
 python -m pytest -q training-loop
 ```
 
-It runs one test, `test_hidden_weight.py`, which proves the known weight never reaches
-the vision prompt. CI runs it on every push.
+The one that matters most is `test_hidden_weight.py`: it proves the known weight never
+reaches the vision prompt. CI runs the tests on every push.
 
 ## The mechanic
 
@@ -110,7 +110,7 @@ training-loop/
 ├── scraper.py                # Open Food Facts (and Farmbrite) → images/ + labels/
 ├── evaluator.py              # hidden-weight prediction → residuals.jsonl
 ├── build_bias_table.py       # residuals.jsonl → ../public/bias-table.json
-├── test_hidden_weight.py     # the unit test
+├── test_hidden_weight.py     # the weight never reaches the prompt
 ├── learning/                 # Sheet-driven learning cycle (design, not running)
 ├── FARMBRITE-EXTRACTION.md   # how to pull Cul2vate's historical records
 └── requirements.txt

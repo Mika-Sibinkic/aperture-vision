@@ -39,7 +39,7 @@ Everything below is reachable from any machine with this repo and the credential
 | Swap the vision provider | create an n8n credential, point the vision node at it | one credential change |
 | Farmbrite product map | re-run the fetch in `scripts/farmbrite-setup.py` | read-only unless `--create` |
 | **The iPad script itself** | see §3, iCloud Drive | file edit, no visit |
-| Check health from anywhere | `python3 scripts/vision-regression-test.py --e2e` | writes real test records; void them afterwards with `/api/void` |
+| Check health from anywhere | `python3 scripts/vision-regression-test.py --e2e` | writes real test records, then voids each one; the Sheet rows stay |
 | Read what happened | `/api/export`, the Google Sheet, n8n execution log | read-only |
 
 ### Requires being on site (short list)
@@ -146,9 +146,9 @@ Nothing currently alerts on any of these. That is the largest sustainability gap
   work hangs the script on a blank screen.
 - **`Request.timeoutInterval` is not reliably honoured.** A 20 s interval sat past
   60 s. Race every network call against a hard `Timer`.
-- **System check is a real tap.** It posts a live frame described as
-  `SYSTEM CHECK — ignore this row`, and the chain logs it like any other donation.
-  Undo it from the iPad's recent list.
+- **System check is a real tap, then an undo.** It posts a live frame described as
+  `SYSTEM CHECK — ignore this row`, then voids it. The Sheet row stays, labeled by
+  that description.
 - Verify any change with `bash scripts/check-ipad-script.sh`; `node --check` alone
   passes files whose functions have been deleted.
 
@@ -170,7 +170,7 @@ Nothing currently alerts on any of these. That is the largest sustainability gap
 ## 9. Command reference
 
 ```bash
-# health check through the live relay (writes real test records)
+# health check through the live relay (writes test records, then voids them)
 python3 scripts/vision-regression-test.py --e2e
 
 # change the model / prompt / mapping, then apply (backs up, verifies, reads back)

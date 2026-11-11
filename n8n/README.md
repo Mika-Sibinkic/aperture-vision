@@ -56,6 +56,7 @@ description fails at **Build vision request**. Post a real JPEG instead:
 python3 scripts/vision-regression-test.py --e2e
 ```
 
-That goes through the live relay and writes real records: a Sheet row, a Farmbrite
-draft and an archived photo. `/api/void` (the iPad's undo) deletes the draft and drops
-the record from the CSV export. The Sheet row stays.
+That goes through the live relay and writes real records, then voids each one through
+`/api/void`. Voiding deletes the Farmbrite draft and drops the record from the CSV
+export. The Sheet row stays, labeled as a regression test. Once
+`APERTURE_DEVICE_TOKEN` is set, export it before you run the probe.

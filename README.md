@@ -39,7 +39,8 @@ The stub provider always answers 0 lb, so the weight columns only prove the plum
 works. The daytime frame is a real failure: only 4 of the board's 40 markers are
 readable in it. `demo/README.md` has the details.
 
-The test proves the known weight never reaches the vision prompt. `npm run dev` serves
+The training-loop tests include one that proves the known weight never reaches the
+vision prompt. `npm run dev` serves
 the UI only, the legacy PWA on `localhost:3000`. A tap there returns
 `Server not configured: N8N_WEBHOOK_URL missing`, because the real path needs n8n, the
 iPad and the camera.
@@ -107,7 +108,8 @@ every load. The price is that every weight is an estimate.
 6. **iPad build.** Set `RELAY` at the top of `scripts/make-ipad-script.py` to your
    Vercel URL. Put the camera's address and login in a gitignored `SECRETS.local.md`
    as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
-   Run `python3 scripts/make-ipad-script.py`, then follow
+   Export `APERTURE_DEVICE_TOKEN` (the same value as in Vercel), run
+   `python3 scripts/make-ipad-script.py`, then follow
    `camera-access/ipad/ONSITE-CARD.md`.
 
 Hardware: one IP camera with a snapshot URL, one printed ChArUco board, and a spare
@@ -122,7 +124,7 @@ Day-to-day operations: `docs/OPERATIONS.md`.
 |---|---|
 | `N8N_WEBHOOK_URL` | `/api/donate`, to forward each tap to n8n |
 | `APERTURE_SHARED_TOKEN` | `/api/donate` and `/api/correct`, sent to n8n's **Verify Token** node |
-| `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header |
+| `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header. `make-ipad-script.py` bakes it into the iPad build |
 | `BLOB_READ_WRITE_TOKEN` | `/api/donate` (archives the photo), `/api/void`, `/api/export` |
 | `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo |
 | `N8N_CORRECTION_URL` | `/api/correct`. No workflow receives it yet |
@@ -130,7 +132,8 @@ Day-to-day operations: `docs/OPERATIONS.md`.
 
 The optional camera bridge has its own `bridge/.env.example` and
 `deploy/.env.example`. Files that are local on purpose are not in the repo:
-`SECRETS.local.md`, the generated `*.local.js` iPad build, and Farmbrite CSV exports.
+`SECRETS.local.md`, the generated `*.local.js` iPad build, Farmbrite CSV exports, and
+the demo's generated `demo/output/`.
 
 ## Limits and security
 
