@@ -491,11 +491,17 @@ async function runDonation(cfg) {
   }
 }
 
+// The recent lists only show the last week; without `since` every record ever logged is read.
+function recentUrl(cfg) {
+  const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  return (cfg.exportUrl || CONFIG.exportUrl) + "?format=json&since=" + since;
+}
+
 // Recent log with one-tap undo. Mis-taps happen on a dock — wrong item typed, photo
 // taken before the load was staged, a duplicate. Without this the only fix is asking
 // someone to hand-edit a spreadsheet later, which never happens.
 async function showHistory(cfg) {
-  const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
+  const req = new Request(recentUrl(cfg));
   req.timeoutInterval = 60;
   req.headers = relayHeaders(cfg);
   let rows = [];
@@ -692,7 +698,7 @@ async function runApp(cfg) {
 
   const refresh = async () => {
     try {
-      const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
+      const req = new Request(recentUrl(cfg));
       req.timeoutInterval = 30;
       req.headers = relayHeaders(cfg);
       const data = await req.loadJSON();

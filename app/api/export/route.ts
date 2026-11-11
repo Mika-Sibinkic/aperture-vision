@@ -36,7 +36,10 @@ const LEAD = [
 
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
-  const s = typeof value === "object" ? JSON.stringify(value) : String(value);
+  let s = typeof value === "object" ? JSON.stringify(value) : String(value);
+  // A leading = + - @ tab or CR makes Excel/Sheets run the cell as a formula. Text
+  // fields (description, item_type) come from the dock, so neutralise them.
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   // Quote if the value could break the row; double any embedded quotes.
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
@@ -103,10 +106,15 @@ export async function GET(req: NextRequest) {
         rows: live,
       });
     }
-    // Never hand back a silently-empty CSV when records exist but could not be read.
-    if (rows.length === 0 && wanted.length > 0) {
+    // Never hand back a CSV with rows silently missing: a short export reads as a
+    // short day. Retry instead.
+    if (readErrors.length > 0) {
       return NextResponse.json(
-        { error: "records exist but none could be read", blobs_found: wanted.length, read_errors: readErrors.slice(0, 5) },
+        {
+          error: `${readErrors.length} of ${wanted.length} records could not be read; try again`,
+          blobs_found: wanted.length,
+          read_errors: readErrors.slice(0, 5),
+        },
         { status: 500 }
       );
     }
