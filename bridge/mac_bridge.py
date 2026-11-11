@@ -28,6 +28,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import secrets
 import sys
 import time
 from typing import Optional
@@ -45,6 +46,8 @@ BRIDGE_TOKEN   = os.environ["BRIDGE_TOKEN"]
 SNAPSHOT_TTL_S = float(os.environ.get("SNAPSHOT_TTL_S", "0.5"))
 LISTEN_PORT    = int(os.environ.get("LISTEN_PORT", "8002"))
 SNAPSHOT_PATH  = os.environ.get("SNAPSHOT_PATH", "/ISAPI/Streaming/channels/101/picture")
+if BRIDGE_TOKEN.startswith("CHANGE_ME") or len(BRIDGE_TOKEN) < 32:
+    sys.exit("BRIDGE_TOKEN is a placeholder or under 32 chars. Generate one: openssl rand -hex 32")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,6 +81,10 @@ def _fetch_snapshot() -> bytes:
 app = FastAPI(title="Aperture Mac Bridge")
 
 
+def _authorized(authorization: str) -> bool:
+    return secrets.compare_digest(authorization.encode(), f"Bearer {BRIDGE_TOKEN}".encode())
+
+
 @app.get("/healthz")
 def healthz():
     try:
@@ -85,13 +92,14 @@ def healthz():
         r = _session.get(CAM_BASE.rstrip("/") + "/ISAPI/System/deviceInfo", timeout=5)
         r.raise_for_status()
         return {"status": "ok", "camera": "reachable"}
-    except Exception as e:
-        return JSONResponse(status_code=503, content={"status": "degraded", "error": str(e)})
+    except Exception:
+        log.exception("healthz: camera unreachable at %s", CAM_BASE)
+        return JSONResponse(status_code=503, content={"status": "degraded"})
 
 
 @app.get("/snapshot")
 def snapshot(authorization: str = Header(default="")):
-    if authorization != f"Bearer {BRIDGE_TOKEN}":
+    if not _authorized(authorization):
         raise HTTPException(status_code=401, detail="invalid bearer token")
     try:
         return Response(content=_fetch_snapshot(), media_type="image/jpeg")
@@ -102,7 +110,7 @@ def snapshot(authorization: str = Header(default="")):
 
 @app.get("/snapshot_with_scale")
 def snapshot_with_scale(authorization: str = Header(default="")):
-    if authorization != f"Bearer {BRIDGE_TOKEN}":
+    if not _authorized(authorization):
         raise HTTPException(status_code=401, detail="invalid bearer token")
     try:
         jpeg = _fetch_snapshot()
@@ -139,5 +147,4 @@ def snapshot_with_scale(authorization: str = Header(default="")):
 if __name__ == "__main__":
     import uvicorn
     log.info("aperture-mac-bridge: listening on :%d  (camera at %s)", LISTEN_PORT, CAM_BASE)
-    log.info("bearer token: %s", BRIDGE_TOKEN[:6] + "..." + BRIDGE_TOKEN[-4:])
     uvicorn.run(app, host="0.0.0.0", port=LISTEN_PORT, log_level="info")

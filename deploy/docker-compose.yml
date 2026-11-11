@@ -21,7 +21,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"   # host-local only; the tunnel fronts it
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8002/healthz', timeout=5).read(); sys.exit(0)"]
       interval: 30s
