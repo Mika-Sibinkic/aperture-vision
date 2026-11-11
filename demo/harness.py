@@ -260,7 +260,7 @@ def main() -> None:
         rr = "" if rec["residual_ratio"] is None else f" {rec['residual_ratio']*100:5.1f}%"
         print(f"  [{marker}] {cha_ok} {rel}{rr}")
 
-    write_report(records, md_path, args.provider, args.model)
+    write_report(records, md_path, args.provider, "stub" if args.provider == "stub" else args.model)
     print(f"\n  → {md_path}")
     print(f"  → {jsonl_path}")
 
