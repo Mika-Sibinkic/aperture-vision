@@ -17,7 +17,9 @@ screen.
 
 ## Try it in a minute
 
-Everything here runs offline and costs nothing. CI runs the same steps.
+None of this needs an API key or makes a paid call. It does need the network once,
+for the npm and pip installs. CI runs lines 2-4 (Python 3.12, Node 22) plus two offline
+checks of the workflow's own node code. The demo itself is not in CI.
 
 ```bash
 bash demo/run_demo.sh --provider stub
@@ -30,10 +32,11 @@ npm run dev
 I timed the first four lines from a fresh clone on my Mac (Python 3.14, Node 22). With
 empty npm and pip caches they took 55 s. With warm caches, three runs took 36, 36 and
 49 s. About half of each run is the demo installing OpenCV into its venv. You should see
-`9 passed` from pytest and `24 passed` from the web tests.
+`9 passed` from pytest and `33 passed` from the web tests.
 
 The demo builds `demo/.venv`, looks for the printed ChArUco board in the two bundled
-dock frames, and writes `demo/output/accuracy-report.md`. On my Mac it found:
+frames, and writes `demo/output/accuracy-report.md`. Production does not run this board
+detector. The demo is the part you can run without the camera. On my Mac it found:
 
 ```
 - ChArUco detected: **1** / 2
@@ -41,23 +44,29 @@ dock frames, and writes `demo/output/accuracy-report.md`. On my Mac it found:
 | dock-empty-night-IR.jpg | 0.00 | 0.00 |  |  | ✅ | 6.164 | poor | 0.00s |
 ```
 
-The stub returns the manifest's true weight with up to 12% jitter. Both frames show an
-empty dock, so the weight columns read 0 and only prove the plumbing works. The daytime
-frame is a real failure: only 4 of the board's 40 markers are readable in it.
-`demo/README.md` has the details.
+The stub makes no vision call and always answers 0 lb. Both frames show an empty dock,
+so the weight columns only prove the plumbing works. The miss is `IMG_0739.JPG`, an
+iPhone photo of the camera feed on a monitor: moire leaves 4 of the board's 40 markers
+readable. The night frame comes from the mounted camera itself. `demo/README.md` has
+the details. `bash demo/run_demo.sh --provider nim` sends the same frames to the
+production prompt and model instead. It needs a NIM key.
 
-The Python tests include one that proves the known weight never reaches the vision
-prompt. The web tests cover the relay routes: the device token, input checks, duplicate
-taps, undo and export. `npm run dev` serves the UI only, the legacy PWA on
-`localhost:3000`. A tap there returns
+The Python tests cover the offline training loop and the board detector. One proves
+the offline evaluator never sends the known weight to the model. The web tests cover
+the relay routes: the device token, input checks, duplicate taps, retries after a
+failed n8n call, undo and export. `node scripts/test_parse_vision.js` runs the
+workflow's weight node (the >2000 lb flag, negative weights, fenced JSON) and
+`node scripts/test_farmbrite_match.js` its Farmbrite product matcher. `npm run dev`
+serves the UI only, the legacy PWA on `localhost:3000`. A tap there returns
 `Server not configured: N8N_WEBHOOK_URL missing`, because the real path needs n8n, the
 iPad and the camera.
 
 ## What a tap returns
 
-I have not pasted a live response here, because capturing one writes a donation to
-production. `python3 scripts/vision-regression-test.py --e2e` sends three control frames
-through the live relay, prints the item and weight for each, and voids them. Their Sheet
+I have not pasted a live response here yet. `python3 scripts/vision-regression-test.py`
+sends the control frames straight to NIM with the production prompt and model and
+writes nothing anywhere. `--e2e` sends three control frames through the live relay
+instead, prints the item and weight for each, and voids them. Their Sheet
 rows stay: two say `REGRESSION TEST`, and the phantom control's says `Kale`. The relay passes through what the workflow's **Shape response** node
 builds. The fields include `weight_lbs`, `item_type`, `container_type`, `container_count`, `weight_lbs_low`,
 `weight_lbs_high`, `implausible_weight`, `prompt_version`, `model`,
@@ -106,8 +115,10 @@ every load. The price is that every weight is an estimate.
 2. **NVIDIA NIM key.** Store it as the `NVIDIA NIM (Aperture)` credential in n8n.
 3. **Google Sheet** with a `Donations` tab, connected through n8n's Google Sheets
    credential.
-4. **Farmbrite (optional).** `scripts/farmbrite-setup.py` finds your IDs. Leave the
-   Farmbrite variables blank and the workflow skips it.
+4. **Farmbrite.** The workflow posts a Farmbrite draft order for every tap with a
+   positive weight. No n8n variable turns that off. To skip Farmbrite, disable the
+   **Farmbrite: log order** node. To use it, first replace the product map in **Build
+   Farmbrite order**: it holds Cul2vate's product IDs. `n8n/README.md` step 4.
 5. **Vercel + Blob.** Deploy this repo to Vercel, create a private Blob store, and set
    the variables in the table below.
 6. **iPad build.** Set `RELAY` at the top of `scripts/make-ipad-script.py` to your
@@ -131,12 +142,11 @@ Day-to-day operations: `docs/OPERATIONS.md`.
 | `APERTURE_SHARED_TOKEN` | `/api/donate` and `/api/correct`, sent to n8n's **Verify Token** node |
 | `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header. `scripts/make-ipad-script.py` bakes it into the iPad build |
 | `BLOB_READ_WRITE_TOKEN` | `/api/donate` (archives the photo), `/api/void`, `/api/export` |
-| `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo |
+| `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo. Unset, undo skips Farmbrite, and fails for a tap that recorded an order id |
 | `N8N_CORRECTION_URL` | `/api/correct`. No workflow receives it yet |
 | `NEXT_PUBLIC_LOCATION_LABEL` | `app/page.tsx`, the legacy PWA's location label |
 
-The optional camera bridge has its own `bridge/.env.example` and
-`deploy/.env.example`. Files that are local on purpose are not in the repo:
+Files that are local on purpose are not in the repo:
 `SECRETS.local.md`, the generated `*.local.js` iPad build, Farmbrite CSV exports, and
 the demo's generated `demo/output/`.
 
@@ -148,15 +158,18 @@ self-reported confidence did not separate good readings from bad ones, so no ope
 screen shows it. The relay checks a device token, but the check stays open until
 `APERTURE_DEVICE_TOKEN` is set, so treat the relay URL as a secret until then. The
 generated iPad build holds the camera password. The Next.js PWA in `app/` is legacy:
-it posts no image, so it only works with one of the bridge-era workflows in `n8n/`.
+it posts no image, so it only worked with the bridge-era workflows (in git history). It
+also sends no device token, and the token cannot go in browser code, so once
+`APERTURE_DEVICE_TOKEN` is set every PWA tap gets a 401.
 `/api/correct` exists, but nothing on the n8n side receives corrections yet, so ground
 truth does not flow back. What is secret and how to report a problem:
 [SECURITY.md](SECURITY.md).
 
 ## Status
 
-Live at Cul2vate since August 2026. `docs/OPERATIONS.md` is the record of what runs and
-what breaks on its own. `CHANGELOG.md` has the history.
+First live taps at Cul2vate on 2026-08-02: the iPad system check plus the three
+regression controls. `docs/OPERATIONS.md` records the state as last verified that day,
+and is the record of what runs and what breaks on its own. `CHANGELOG.md` has the history.
 
 ## Contributing
 
@@ -168,7 +181,7 @@ Issues and pull requests are welcome. Run the offline checks above first, and ru
 This is the public copy of the private working repository, with the full commit history
 preserved. Before publishing, `git-filter-repo` removed camera credentials, LAN and
 hosting identifiers, a third party's confidential deal material, and personal contact
-details from every commit. A placeholder company name and role descriptions stand in
+details from file contents. A placeholder company name and role descriptions stand in
 for the removed names. Commits before 2026-06-10 were reconstructed from file timestamps
 when the project moved into git.
 

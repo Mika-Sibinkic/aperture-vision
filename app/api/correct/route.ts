@@ -1,6 +1,6 @@
 // Manual ground-truth correction endpoint.
 //
-// Called when the client contact/Joshua hits "Edit weight" on the iPad after a donation
+// Called when site staff tap "Edit weight" on the iPad after a donation
 // logs incorrectly. Forwards to a dedicated n8n webhook that updates the
 // Google Sheet row and appends to the learning loop's ground-truth log.
 //

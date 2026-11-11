@@ -54,4 +54,4 @@
 
 ## Pre-history (Branch Cam era, ~Dec 2025 to Feb 2026)
 - n8n + OpenAI vision prototype at The Branch food bank (Antioch): Azure web app, Cosmos DB, anomaly-detection and ChArUco roadmap
-- Origin: scale bottleneck at The Branch via a contact at The Branch; 92-95% production accuracy, 98% test ceiling
+- Origin: scale bottleneck at The Branch via a contact at The Branch. No accuracy was measured there that this repo can show.
