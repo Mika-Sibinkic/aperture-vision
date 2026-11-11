@@ -69,3 +69,23 @@ describe("donate input validation", () => {
     expect(put.mock.calls[0][0]).toMatch(/^donations\/2026-08-02\//);
   });
 });
+
+describe("duplicate taps", () => {
+  it("a photo that already exists for this donation_id returns 409 without calling n8n", async () => {
+    // The SDK has no dedicated class for this; it throws a BlobError carrying the API message.
+    put.mockRejectedValueOnce(
+      new Error("Vercel Blob: This blob already exists, use `allowOverwrite: true` if you want to overwrite it."),
+    );
+    const res = await post({ donation_id: "0b8e1c52-6f0a-4c1e-9d2b-3a4f5e6d7c8b", image_b64: PHOTO });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("already logged or in progress");
+    expect(n8n).toHaveBeenCalledTimes(0);
+  });
+
+  it("any other archive failure still logs the donation", async () => {
+    put.mockRejectedValueOnce(new Error("Vercel Blob: service unavailable"));
+    const res = await post({ donation_id: "0b8e1c52-6f0a-4c1e-9d2b-3a4f5e6d7c8b", image_b64: PHOTO });
+    expect(res.status).toBe(200);
+    expect(n8n).toHaveBeenCalledTimes(1);
+  });
+});

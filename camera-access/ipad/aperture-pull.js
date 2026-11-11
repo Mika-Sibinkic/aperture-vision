@@ -137,7 +137,11 @@ function headerLookup(headers, name) {
 // State lives in a plain file, so it survives the app being killed, the iPad
 // being powered off mid-run, and iOS suspending the script.
 // ---------------------------------------------------------------------------
-const IN_FLIGHT_WINDOW_MS = 75_000;   // > worst observed round trip (~27 s) with margin
+// The relay aborts its n8n call at 100 s, so the iPad waits longer than that per attempt.
+// Shorter, and the iPad gave up and retried while n8n was still logging the first attempt.
+const RELAY_TIMEOUT_S = 110;
+// Covers the slowest full run: 2 camera tries (25 s) + 2 relay tries + backoff.
+const IN_FLIGHT_WINDOW_MS = (2 * 25 + 2 * RELAY_TIMEOUT_S + 5) * 1000;
 
 // Resolved lazily, never at load time: nothing about starting this script should
 // be able to throw before the error handler in main() is installed.
@@ -317,6 +321,10 @@ async function postToRelay(cfg, b64, description, donationId) {
     source: "aperture-ipad",
   });
   const text = await post.loadString();
+  // 409: an earlier attempt of this same tap already reached the relay. Not an error to retry.
+  if (post.response && post.response.statusCode === 409) {
+    throw new Error("This donation is already logged. Check Recent before you tap again.");
+  }
   let parsed;
   try { parsed = JSON.parse(text); }
   catch (e) { throw new Error("Server sent an unreadable reply: " + String(text).slice(0, 200)); }
@@ -388,7 +396,7 @@ async function selfTest(cfg) {
 
   try {
     const res = await withTimeout(
-      postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK \u2014 ignore this row"), 90, "Server");
+      postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK \u2014 ignore this row"), RELAY_TIMEOUT_S, "Server");
     const ok = Boolean(res && (typeof res.weight_lbs === "number" || res.item_type));
     steps.push({ ok: ok, name: "Weight recorded",
       detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
@@ -464,7 +472,7 @@ async function runDonation(cfg) {
     ui.render(["Photo captured", "Weighing…", "", "This takes about 10–25 seconds."], "Weighing");
 
     const small = shrink(frame, cfg.maxPixels);
-    const result = await withRetry("relay", () => withTimeout(postToRelay(cfg, small.toBase64String(), "", donationId), 90, "Server"));
+    const result = await withRetry("relay", () => withTimeout(postToRelay(cfg, small.toBase64String(), "", donationId), RELAY_TIMEOUT_S, "Server"));
 
     const summary = typeof result.weight_lbs === "number"
       ? `${result.weight_lbs.toFixed(1)} lbs ${result.item_type || ""}`.trim()
@@ -715,7 +723,7 @@ async function runApp(cfg) {
         await call("setStep('Weighing\\u2026')");
         const small = shrink(frame, cfg.maxPixels);
         const result = await withRetry("relay", () =>
-          withTimeout(postToRelay(cfg, small.toBase64String(), action.item || "", donationId), 90, "Server"));
+          withTimeout(postToRelay(cfg, small.toBase64String(), action.item || "", donationId), RELAY_TIMEOUT_S, "Server"));
 
         const isEmpty = Boolean(result && (result.item_type === "empty" || result.weight_lbs === 0));
         writeState({ inFlightAt: null, inFlightId: null });
@@ -724,6 +732,7 @@ async function runApp(cfg) {
       } catch (e) {
         writeState({ inFlightAt: null, inFlightId: null });
         await call("showError(" + JSON.stringify(String(e && e.message ? e.message : e)) + ")");
+        await refresh();
       }
     } else if (action.type === "undo") {
       try {

@@ -30,6 +30,7 @@ type ArchiveResult = {
   sha256: string | null;
   bytes: number | null;
   error: string | null;
+  duplicate?: true;   // a photo for this donation_id already exists
 };
 
 /**
@@ -65,7 +66,11 @@ async function archivePhoto(
     });
     return { url: blob.url, sha256, bytes: bytes.length, error: null };
   } catch (e) {
-    return { ...empty, error: e instanceof Error ? e.message : "archive failed" };
+    const error = e instanceof Error ? e.message : "archive failed";
+    // The SDK has no error class for this, only the API message. The path is keyed by
+    // donation_id, so it means an earlier attempt of the same tap already got this far.
+    if (/already exists/i.test(error)) return { ...empty, error, duplicate: true };
+    return { ...empty, error };
   }
 }
 
@@ -124,6 +129,11 @@ export async function POST(req: NextRequest) {
   const description = typeof body.description === "string" ? body.description.slice(0, 2000) : "";
 
   const archive = await archivePhoto(body.image_b64, donationId, triggeredAt);
+  // A retry of a tap whose first attempt is still running (or already logged) must not
+  // reach n8n again, or the same donation lands twice in the Sheet and Farmbrite.
+  if (archive.duplicate) {
+    return NextResponse.json({ error: "already logged or in progress" }, { status: 409 });
+  }
 
   const payload = {
     description,
