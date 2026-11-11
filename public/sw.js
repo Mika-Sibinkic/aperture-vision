@@ -1,9 +1,10 @@
 // Aperture PWA service worker — minimal shell cache so the iPad can
 // relaunch the UI even if the WiFi hiccups briefly. The /api/donate call
 // itself always goes network-only; we never want to serve stale donation
-// responses from cache.
+// responses from cache. Pages are network-first so a deploy shows up on the
+// next launch; the cached copy is only the offline fallback.
 
-const CACHE = "aperture-shell-v1";
+const CACHE = "aperture-shell-v2";
 const SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -37,7 +38,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for shell assets.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((resp) => {
+          if (resp.ok) {
+            const clone = resp.clone();
+            caches.open(CACHE).then((c) => c.put(event.request, clone));
+          }
+          return resp;
+        })
+        .catch(() => caches.match(event.request).then((hit) => hit || caches.match("/")))
+    );
+    return;
+  }
+
+  // Cache-first for icons and the manifest.
   event.respondWith(
     caches.match(event.request).then((hit) => {
       if (hit) return hit;

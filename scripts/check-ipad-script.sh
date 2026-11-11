@@ -17,7 +17,7 @@ echo "syntax ......... ok"
 
 for f in runApp apertureHTML chooseMode runDonation showHistory selfTest finishAlert progressTable \
          grabFrame postToRelay withTimeout showResult showError resolveConfig \
-         runSetup shrink withRetry readState writeState statePath headerLookup \
+         runSetup shrink withRetry readState writeState statePath headerLookup relayHeaders recentUrl voidDonation esc \
          md5 parseAuthHeader buildDigestAuth main; do
   grep -q "function $f(" "$ABS" || { echo "MISSING FUNCTION: $f"; exit 1; }
 done
@@ -52,4 +52,11 @@ const r=m.buildDigestAuth("Mufasa","Circle Of Life","GET","/dir/index.html",www,
 if(r!=="6629fae49393a05397450978507c4ef1"){console.error("RFC 2617 DIGEST BROKEN");process.exit(1)}
 ' "$ABS"
 echo "digest ......... ok"
+
+node -e '
+const {esc}=require(process.argv[1]);
+const out=esc("<h1>x</h1>");
+if(out.includes("<")||esc("\"'"'"'&")!=="&#34;&#39;&#38;"){console.error("esc() BROKEN:",out);process.exit(1)}
+' "$ABS"
+echo "html escape .... ok"
 echo "PASS — safe to generate and transfer"

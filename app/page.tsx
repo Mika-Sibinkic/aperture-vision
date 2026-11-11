@@ -6,13 +6,13 @@ type Phase = "idle" | "sending" | "success" | "error";
 
 type DonationResult = {
   weight_lbs: number | null;
-  weight_residual_est: number | null;
   item_type: string | null;
-  confidence: number | null;
-  charuco_detected: boolean;
   farmbrite_id: string | null;
   notes?: string | null;
 };
+
+// Same rule as the iPad: the model reports an empty staging zone as item "empty" or 0 lb.
+const isEmpty = (r: DonationResult) => r.item_type === "empty" || r.weight_lbs === 0;
 
 export default function Home() {
   const [description, setDescription] = useState("");
@@ -38,8 +38,13 @@ export default function Home() {
         })
       });
       if (!res.ok) {
+        // The relay answers errors as {"error": "..."}; show the sentence, not the JSON.
         const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+        let message = text;
+        try {
+          message = JSON.parse(text).error ?? text;
+        } catch {}
+        throw new Error(message || `The server answered HTTP ${res.status}.`);
       }
       const data = (await res.json()) as DonationResult;
       setResult(data);
@@ -65,7 +70,7 @@ export default function Home() {
         <textarea
           id="note"
           className="note"
-          placeholder="e.g. frozen ground beef, mixed produce, canned goods…"
+          placeholder="e.g. Kale"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           disabled={disabled}
@@ -82,7 +87,7 @@ export default function Home() {
       <div className="card status" aria-live="polite">
         {phase === "idle" && (
           <div className="muted">
-            Place the donation inside the taped zone, then press the green button.
+            Place the donation inside the taped zone, then press Log Donation.
           </div>
         )}
 
@@ -92,11 +97,20 @@ export default function Home() {
               <div className="spinner" />
               <div className="v">Weighing. One moment.</div>
             </div>
-            <div className="muted">Usually about 4 to 10 seconds.</div>
+            <div className="muted">Usually about 10 to 25 seconds.</div>
           </>
         )}
 
-        {phase === "success" && result && (
+        {phase === "success" && result && isEmpty(result) && (
+          <>
+            <div className="headline err">Nothing in the zone</div>
+            <div className="muted">
+              Place the donation inside the yellow tape and press the button again.
+            </div>
+          </>
+        )}
+
+        {phase === "success" && result && !isEmpty(result) && (
           <>
             <div className="headline ok">
               {result.weight_lbs !== null
@@ -126,9 +140,7 @@ export default function Home() {
         )}
       </div>
 
-      <div className="footer">
-        Null Systems. Tap outside the box to hide the keyboard.
-      </div>
+      <div className="footer">Null Systems</div>
     </main>
   );
 }

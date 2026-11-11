@@ -7,17 +7,20 @@ single most likely thing to go wrong on site. This bakes the settings in, so the
 on-site procedure is "import file, tap Self-test, tap Log Donation" — no typing,
 no settings screens, no chance of a typo.
 
-Reads live values from SECRETS.local.md (gitignored) and writes:
+Reads live values from SECRETS.local.md (gitignored) plus APERTURE_DEVICE_TOKEN
+from the environment (the same value set on Vercel), and writes:
 
     camera-access/ipad/Aperture.local.js      <- gitignored, CONTAINS THE PASSWORD
 
 Transfer it to the iPad by AirDrop (or iCloud Drive > Scriptable). Never commit
 it, never email it.
 
-Usage:  python3 scripts/make-ipad-script.py
+Usage:  APERTURE_DEVICE_TOKEN=... python3 scripts/make-ipad-script.py
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -43,6 +46,7 @@ def main() -> None:
         sys.exit("ERROR: could not read the camera IP / admin credentials out of SECRETS.local.md.")
 
     base, user, password = f"http://{ip.group(1)}", creds.group(1), creds.group(2)
+    device_token = os.environ.get("APERTURE_DEVICE_TOKEN", "")
 
     js = SOURCE.read_text()
     block = re.search(r"const CONFIG = \{.*?\n\};", js, re.S)
@@ -58,6 +62,7 @@ def main() -> None:
         f'  relay: "{RELAY}",\n'
         f'  exportUrl: "{RELAY.replace("/api/donate", "/api/export")}",\n'
         f'  voidUrl: "{RELAY.replace("/api/donate", "/api/void")}",\n'
+        f"  deviceToken: {json.dumps(device_token)},\n"
         f'  location: "{LOCATION}",\n'
         "  maxPixels: 1600,\n"
         "};"
@@ -102,6 +107,7 @@ def main() -> None:
     print(f"wrote  {TARGET.relative_to(REPO)}  ({TARGET.stat().st_size // 1024} KB, mode 600)")
     print(f"  camera : {base}  user={user}  pass={'*' * len(password)}")
     print(f"  relay  : {RELAY}")
+    print(f"  token  : {'set' if device_token else 'NOT SET (works only while the relay is open)'}")
     print("\nAirDrop this file to the iPad, open it in Scriptable, rename to 'Aperture'.")
     print("It never prompts for settings — the on-site steps are import, Self-test, done.")
 
