@@ -59,7 +59,7 @@ Every training sample must have:
 2. Open Food Facts: product photos with net weights. Free API. This is what
    `scraper.py` pulls today.
 3. Farmbrite's own Cul2vate history: past harvest records with photo and weight.
-   Same distribution as production. See `FARMBRITE-EXTRACTION.md`.
+   Same distribution as production.
 4. Aperture's own production history, once real weights come back through
    `/api/correct` (not wired yet).
 5. Synthetic generation: last resort, only for rare items with no real photos. Use
@@ -112,7 +112,6 @@ training-loop/
 ├── build_bias_table.py       # residuals.jsonl → ../public/bias-table.json
 ├── test_hidden_weight.py     # the weight never reaches the prompt
 ├── learning/                 # Sheet-driven learning cycle (design, not running)
-├── FARMBRITE-EXTRACTION.md   # how to pull Cul2vate's historical records
 └── requirements.txt
 ```
 

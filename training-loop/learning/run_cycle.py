@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Daily learning-loop orchestrator.
 
-Runs on the Dell G7 as a systemd timer (see systemd/aperture-learning.timer).
+Not scheduled anywhere. The live workflow does not read its output yet.
 Steps:
   1. Pull fresh donation rows from the Google Sheet
   2. Split into (has_ground_truth) and (no_ground_truth yet)

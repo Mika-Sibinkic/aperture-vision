@@ -9,7 +9,7 @@ alternatives_considered:
       It was only ever needed to relay the camera; the iPad now does that at tap time.
       Keeping it would add the single most failure-prone component back: an 8 GB laptop
       whose WSL gets ~3.7 GB (too small for qwen2.5vl:3b), reachable only through a
-      cloudflared tunnel that has already died twice, on a machine that also runs NSOS.
+      cloudflared tunnel that has already died twice, on a machine that has another job.
       It cannot serve the camera anyway - it is not on the Cul2vate LAN.
   - name: $5-10/mo VPS running the bridge + vision proxy
     reject_reason: >
@@ -26,7 +26,7 @@ alternatives_considered:
 corroborating_signals:
   - Live end-to-end run 2026-07-28 through Vercel prod -> n8n Cloud -> NIM -> Google Sheet, HTTP 200 in 11.5s
   - scripts/vision-regression-test.py --e2e - both controls pass against production
-  - docs/methods/camera-connectivity.md - Hik-Connect cloud pull verified dead; ISAPI-on-LAN is the only capture path
+  - CHANGELOG.md, camera-path correction 2026-07-22 - Hik-Connect cloud pull verified dead; ISAPI-on-LAN is the only capture path
   - Prior outages both traced to self-managed pieces (Mac bridge died 2026-04-17; cloudflared quick tunnels went NXDOMAIN)
 confidence:
   primary_claim: VERIFIED      # full chain exercised against production, twice, both controls
@@ -74,7 +74,7 @@ can be off when someone walks up to donate.
 ## Consequences
 
 - Easier: there is no server to be down. Recovery from a site power cut is "tap it
-  again". The Dell stays dedicated to NSOS and is never a Cul2vate dependency.
+  again". The Dell is never a Cul2vate dependency.
 - Harder / committed to: capture requires the iPad to be present and on the Cul2vate
   Wi-Fi, so unattended/hands-off capture is out until the low-cost LAN box is added. Vision
   depends on NIM's free credits; if they run dry, swapping providers is a single n8n

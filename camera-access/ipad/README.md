@@ -102,9 +102,9 @@ verifies → PUTs → reads back; `--restore <backup>` rolls back):
 
 If on-site testing shows Scriptable can't reach the camera over HTTP on this
 network (ATS/proxy edge cases) **and** the camera won't allow Basic auth, drop a
-pre-flashed **$40-75 mini-PC / Pi** on the LAN running `bridge/mac_bridge.py`
-(`camera-access/README.md` Option A). Same pipeline, box does the pull instead
-of the iPad. This is the only path that needs hardware.
+pre-flashed **$40-75 mini-PC / Pi** on the LAN that pulls the frame instead of the
+iPad. The bridge-era `bridge/mac_bridge.py` did this; it is in git history
+(`git log --all -- bridge/`). This is the only path that needs hardware.
 
 ## Files
 

@@ -2,7 +2,7 @@
   "_schema": {
     "description": "Per-item average unit-weight prior (lbs). The harness uses this as a Bayesian prior to constrain the vision weight estimate for recurring items (count_units * avg_unit_weight_lb anchors the estimate). Distinct from data/containers.json (tare). First match by product_name.",
     "unit": "pounds per single unit of `default_unit`",
-    "source": "Seed values from the Cul2vate Log Template (Avg_Weights tab) — SYNTHETIC seed, low confidence. Replace/extend with real Farmbrite harvest history per docs/training-loop/FARMBRITE-EXTRACTION.md.",
+    "source": "Seed values from the Cul2vate Log Template (Avg_Weights tab) — SYNTHETIC seed, low confidence. Replace/extend with real Farmbrite harvest history.",
     "confidence": "seed",
     "last_updated": "2026-06-15"
   },

@@ -16,7 +16,7 @@ alternatives_considered:
     reject_reason: Dies whenever the Mac leaves/sleeps (the original 2026-04-17 failure). Not durable.
 corroborating_signals:
   - RFC 2617 HTTP Digest; script response verified against the canonical test vector (node test, 2026-07-22)
-  - docs/methods/camera-connectivity.md (Hik-Connect cloud-pull proven dead; ISAPI-on-LAN is the only method that ever pulled a frame)
+  - CHANGELOG.md, camera-path correction 2026-07-22 (Hik-Connect cloud-pull proven dead; ISAPI-on-LAN is the only method that ever pulled a frame)
   - iOS background-execution limits (apps suspended; no persistent inbound server), hence tap-time foreground pull, not a server
   - Existing working pipeline shape (2026-04-17 demo): iPad tap -> relay -> n8n -> frame -> vision -> Sheet
 confidence:
