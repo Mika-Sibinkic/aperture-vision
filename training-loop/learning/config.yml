@@ -28,6 +28,7 @@ bias_multiplier:
   min_samples_before_use: 3
   max_multiplier: 1.25   # never amplify the model's weight by more than 25%
   min_multiplier: 0.80   # never de-amplify below 80%
+  max_per_cycle_delta_pct: 5.0   # one cycle moves a learned multiplier at most 5%
   ema_half_life_days: 14
 
 classifier_reference_sets:
