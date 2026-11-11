@@ -1,9 +1,10 @@
 # Aperture: on-site card (iPad setup)
 
-**Time: ~10 minutes. Nothing to type. Nothing to configure.**
+**About 10 minutes. The camera login and relay URL are already in the file.**
 
-Everything on the server side is already live and tested end to end. The only thing that has never run on this iPad is the
-camera pull, and step 3 proves it in one tap before any volunteer sees it.
+The relay, n8n and the model were last checked live on 2026-08-02. Step 3 checks the
+camera pull from this iPad, and every hop after it, in one tap before any volunteer
+sees it.
 
 ---
 
@@ -32,7 +33,7 @@ The same network as the camera. This is the only network requirement.
 - Open the AirDropped `Aperture.local.js` → **Open in Scriptable** → it appears
   in the script list. Long-press it → **Rename** → `Aperture`.
 
-### 3. Run the self-test: this is the gate
+### 3. Run the system check: this is the gate
 In the **Scriptable app**, just tap **Aperture**. A menu appears; choose **System check**.
 
 (The menu only appears inside the Scriptable app. The Home Screen icon you add in step 4
@@ -53,9 +54,9 @@ with one line per step. With an empty zone it looks like this (the sizes vary by
 
 - **All ✅ → you're done. Go to step 4.**
 - **Any ❌ → stop and do the one thing next to it** (see the short list below).
-  Don't debug anything else; every other hop is already proven.
+  Don't debug anything else.
 
-The self-test is a real tap, then an undo. Its Sheet row stays, with a description
+The system check is a real tap, then an undo. Its Sheet row stays, with a description
 that starts with `SYSTEM CHECK`. The CSV export and Farmbrite do not keep it.
 
 ### 4. Make it the "app" for volunteers: THIS is the handoff
@@ -104,14 +105,14 @@ on each entry. Volunteers never need the Scriptable app.
 
 ---
 
-## If the self-test shows a ❌: one action each
+## If the system check shows a ❌: one action each
 
 | What it says | Do exactly this |
 |---|---|
-| ❌ Camera: *can't reach the camera* | The iPad is on the wrong Wi-Fi. Switch it to the Cul2vate network and run the self-test again. |
-| ❌ Camera: *rejected the saved password* | The camera password changed. Text Mika; he regenerates the file in 1 minute. |
+| ❌ Camera: *can't reach the camera* | The iPad is on the wrong Wi-Fi. Switch it to the Cul2vate network and run the system check again. |
+| ❌ Camera: *rejected the saved password* | The camera password changed. Text whoever generated the file; they regenerate it with the new password. |
 | ❌ Server: *unauthorized* | The iPad build has no device token, or the wrong one. Regenerate it with `APERTURE_DEVICE_TOKEN` exported (the same value as in Vercel) and AirDrop it again. |
-| ❌ Server: any other error | The site internet is down, or the service is briefly out. Wait 60 seconds and run the self-test again. If it fails twice, text Mika. |
+| ❌ Server: any other error | The site internet is down, or the service is briefly out. Wait 60 seconds and run the system check again. If it fails twice, text whoever generated the file. |
 | ❌ Test entry removed | The weight was logged but the undo failed. From the menu, choose **Recent log (undo)** and tap the `SYSTEM CHECK` entry. |
 
 ---
