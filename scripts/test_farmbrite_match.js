@@ -27,6 +27,10 @@ const cases = [
   ['', 'peppers', NOV, null],
   ['', 'squash', NOV, null],
   ['', 'onion', NOV, null],
+  ['', 'tomato', NOV, null],
+  // A singular name still finds its only product.
+  ['', 'carrot', NOV, 'Carrots'],
+  ['sweet potato', 'produce', NOV, 'Sweet Potatoes'],
   // 'produce' used to match Community Garden Produce.
   ['', 'produce', NOV, null],
   ['', 'mixed produce', AUG, 'Seasonal Produce - August'],

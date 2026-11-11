@@ -20,8 +20,14 @@ Design rules (this is a live production workflow):
   * NO SECRETS  - asserts no nvapi-/bearer material is present in the outgoing JSON.
 
 Usage:
-    source <your .env>          # holds N8N_BASE_URL and N8N_API_KEY
+    export N8N_BASE_URL=https://<you>.app.n8n.cloud/api/v1
+    export N8N_API_KEY=...            # n8n Settings > n8n API
+    export N8N_WORKFLOW_ID=...        # the id in the workflow's URL
     python3 scripts/rewire-n8n-ipad-nim.py [--dry-run]
+
+The NIM and Farmbrite credential ids are read from the credentials already attached
+to "Vision: weight estimate" and "Farmbrite: log order" (n8n/README.md step 3).
+N8N_NIM_CREDENTIAL_ID and N8N_FARMBRITE_CREDENTIAL_ID override them.
 
 Rollback:
     python3 scripts/rewire-n8n-ipad-nim.py --restore n8n/backups/<file>.json
@@ -40,7 +46,7 @@ from pathlib import Path
 import uuid
 
 REPO = Path(__file__).resolve().parent.parent
-WORKFLOW_ID = "<n8n-workflow-id>"
+WORKFLOW_ID = os.environ.get("N8N_WORKFLOW_ID", "").strip()
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 NIM_MODEL = "nvidia/nemotron-nano-12b-v2-vl"
 PROMPT_VERSION = "v0.9-board"
@@ -74,8 +80,8 @@ FARMBRITE_CREDENTIAL_NAME = "Farmbrite (Aperture)"
 def api(method: str, path: str, body: dict | None = None):
     base = os.environ.get("N8N_BASE_URL", "").rstrip("/")
     key = os.environ.get("N8N_API_KEY", "")
-    if not base or not key:
-        sys.exit("ERROR: N8N_BASE_URL / N8N_API_KEY not set. `source` the framework .env first.")
+    if not base or not key or not WORKFLOW_ID:
+        sys.exit("ERROR: set N8N_BASE_URL, N8N_API_KEY and N8N_WORKFLOW_ID first (see the docstring).")
     req = urllib.request.Request(
         f"{base}{path}",
         method=method,
@@ -87,6 +93,8 @@ def api(method: str, path: str, body: dict | None = None):
             return resp.status, json.load(resp)
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()[:600].decode(errors="replace")
+    except urllib.error.URLError as exc:   # DNS, refused, timeout
+        return 0, str(exc.reason)
 
 
 def load_system_prompt() -> str:
@@ -105,20 +113,24 @@ def load_system_prompt() -> str:
     return prompt
 
 
-def find_credential_id() -> str:
-    """n8n's public API cannot list credentials; read the id cached by the creator step."""
-    cache = REPO / ".n8n-nim-credential-id"
+def credential_id(wf: dict, node_name: str, env: str, cache_name: str) -> str | None:
+    """n8n's public API cannot list credentials. Take the id from the environment, an
+    older gitignored cache file, or the credential already attached to the node."""
+    if os.environ.get(env, "").strip():
+        return os.environ[env].strip()
+    cache = REPO / cache_name
     if cache.exists():
         return cache.read_text().strip()
-    env = os.environ.get("N8N_NIM_CREDENTIAL_ID", "").strip()
-    if env:
-        return env
-    sys.exit(
-        "ERROR: NIM credential id unknown.\n"
-        "  Create it once:  POST /credentials {name:'NVIDIA NIM (Aperture)', type:'httpHeaderAuth',\n"
-        "                     data:{name:'Authorization', value:'Bearer <nvapi-key>'}}\n"
-        f"  then save the returned id to {cache} (gitignored) or export N8N_NIM_CREDENTIAL_ID."
-    )
+    node = next((n for n in wf["nodes"] if n["name"] == node_name), {})
+    return node.get("credentials", {}).get("httpHeaderAuth", {}).get("id")
+
+
+def find_credential_id(wf: dict) -> str:
+    found = credential_id(wf, VISION_NODE, "N8N_NIM_CREDENTIAL_ID", ".n8n-nim-credential-id")
+    if not found:
+        sys.exit(f"ERROR: NIM credential id unknown. Attach {NIM_CREDENTIAL_NAME!r} to "
+                 f"{VISION_NODE!r} in n8n, or export N8N_NIM_CREDENTIAL_ID.")
+    return found
 
 
 PRODUCT_MAP = {
@@ -232,22 +244,26 @@ def farmbrite_build_code() -> str:
         "  }\n"
         "  if (productId) break;\n"
         "}\n"
-        "// Contains-match, longest name wins. Only a product name found INSIDE the text\n"
-        "// counts ('2 crates of kale' -> Kale). The reverse let a generic word pick a\n"
-        "// variety: 'potatoes' -> Adirondack Blue Potatoes. [fixed 2026-11-11]\n"
+        "// Contains-match. A product name found INSIDE the text wins, longest first\n"
+        "// ('2 crates of kale' -> Kale). The text found inside a product name counts only\n"
+        "// when exactly one product contains it: 'carrot' -> Carrots, while 'potatoes'\n"
+        "// or 'tomato' fit several varieties and skip. [fixed 2026-11-11]\n"
         "// Buckets are never contains-matched: 'produce' hit Community Garden Produce\n"
         "// and every Seasonal month. Seasonal is only the explicit month fallback below.\n"
         "const BUCKET = /^(Seasonal Produce|Community Garden Produce|Mistake|Ministry )/;\n"
         "for (const wanted of candidates) {\n"
         "  if (productId) break;\n"
         "  let best = 0;\n"
+        "  const containing = [];\n"
         "  for (const [name, id] of Object.entries(PRODUCTS)) {\n"
         "    if (BUCKET.test(name)) continue;\n"
         "    const n = norm(name);\n"
         "    if (n && wanted.includes(n) && n.length > best) {\n"
         "      best = n.length; productId = id; productName = name;\n"
         "    }\n"
+        "    if (n.includes(wanted)) containing.push([name, id]);\n"
         "  }\n"
+        "  if (!productId && containing.length === 1) [productName, productId] = containing[0];\n"
         "}\n"
         "// Fall back to the month bucket Cul2vate already uses for mixed loads.\n"
         "// No bucket exists for Nov-May yet, so those loads skip with a reason.\n"
@@ -286,7 +302,6 @@ def build_request_code(system_prompt: str) -> str:
         "// Build the NVIDIA NIM vision request from the frame the iPad posted.\n"
         "// The iPad pulls the mounted Hikvision over the Cul2vate LAN at tap time and\n"
         "// sends it here as `image_b64` — there is no bridge/tunnel in the path.\n"
-        "// Also emits the scale_* fields the parse node expects (null until scale OCR ships).\n"
         f"const SYSTEM_PROMPT = {json.dumps(system_prompt)};\n\n"
         f"const body = $('{WEBHOOK_NODE}').first().json.body || {{}};\n"
         f"const config = $('{CONFIG_NODE}').first().json;\n\n"
@@ -317,32 +332,75 @@ def build_request_code(system_prompt: str) -> str:
         "    // parse node throws 'Vision returned non-JSON'. [VERIFIED 2026-07-22]\n"
         "    response_format: { type: 'json_object' }\n"
         "  },\n"
-        "  image_chars: b64.length,\n"
-        "  scale_reading_lbs: null,\n"
-        "  scale_confidence: null,\n"
-        "  scale_stable: false,\n"
-        "  scale_raw_text: null\n"
+        "  image_chars: b64.length\n"
         "}}];"
     )
 
 
-def patch_parse_code(code: str) -> str:
-    """Teach the parse node to read NIM's HTTP shape, strip fences, and follow the rename."""
-    old_raw = "const raw = $json.message?.content ?? $json.content ?? $json;"
-    new_raw = (
-        "// NIM (HTTP) returns choices[0].message.content; the older langchain node\n"
-        "// returned message.content / content. Accept all shapes.\n"
+def parse_vision_code() -> str:
+    """Code for the node that turns the model's reply into the logged record.
+
+    The model's number is the logged number (prompt v0.6): no tare, no density
+    override, no bias. Owned here in full, so no old layer survives a re-run.
+    """
+    return (
+        "// Parse the model's JSON, clamp the weight at 0, flag anything over 2000 lb,\n"
+        "// and merge the tap payload. container_type is the model's, unchanged.\n"
+        "// NIM returns choices[0].message.content; older nodes returned message.content.\n"
         "let raw = $json.choices?.[0]?.message?.content ?? $json.message?.content ?? $json.content ?? $json;\n"
-        "// Defensive: strip ```json fences if a model ever wraps its output.\n"
         "if (typeof raw === 'string') {\n"
         "  raw = raw.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/, '').trim();\n"
-        "}"
+        "}\n"
+        "let vision;\n"
+        "try {\n"
+        "  vision = typeof raw === 'string' ? JSON.parse(raw) : raw;\n"
+        "} catch (e) {\n"
+        "  throw new Error('Vision returned non-JSON: ' + String(raw).slice(0, 300));\n"
+        "}\n\n"
+        f"const trigger = $('{WEBHOOK_NODE}').first().json.body || {{}};\n"
+        f"const config = $('{CONFIG_NODE}').first().json;\n\n"
+        "const rawWeight = vision.weight_lbs;\n"
+        "const weight = typeof rawWeight === 'number' ? Math.max(0, rawWeight) : null;\n"
+        "// The 6x6 ft zone cannot hold more; a bigger number is almost always an\n"
+        "// over-count. Flagged for review, still logged.\n"
+        "const implausible = weight !== null && weight > 2000;\n"
+        "const flags = Array.isArray(vision.known_failure_flags) ? vision.known_failure_flags.slice() : [];\n"
+        "if (implausible) flags.push('implausible_weight_review');\n"
+        "const count = vision.container_count;\n\n"
+        "return [{ json: {\n"
+        "  ...vision,\n"
+        "  donation_id: trigger.donation_id ||\n"
+        "    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),\n"
+        "  container_type: vision.container_type || 'unknown',\n"
+        "  container_count: Number.isFinite(count) && count > 0 ? Math.round(count) : 1,\n"
+        "  container_fill_fraction: vision.container_fill_fraction ?? null,\n"
+        "  weight_lbs_raw: rawWeight,\n"
+        "  weight_lbs: weight,\n"
+        "  known_failure_flags: flags,\n"
+        "  implausible_weight: implausible,\n"
+        "  confidence: implausible ? Math.min(vision.confidence ?? 0.5, 0.3) : (vision.confidence ?? null),\n"
+        "  // Sheet columns left from the removed tare, density, bias and scale layers.\n"
+        "  // They keep the values those layers always produced, so the Sheet keeps its shape.\n"
+        "  tare_lbs: 0,\n"
+        "  bias_multiplier: 1,\n"
+        "  density_used: null,\n"
+        "  density_source: 'model',\n"
+        "  scale_reading_lbs: null,\n"
+        "  scale_confidence: null,\n"
+        "  true_weight_lbs: null,\n"
+        "  ground_truth_source: null,\n"
+        "  residual_vs_scale_lbs: null,\n"
+        "  description: trigger.description ?? null,\n"
+        "  location: trigger.location ?? null,\n"
+        "  triggered_at: trigger.triggered_at ?? new Date().toISOString(),\n"
+        "  image_url: trigger.image_url ?? null,\n"
+        "  image_sha256: trigger.image_sha256 ?? null,\n"
+        "  image_bytes: trigger.image_bytes ?? null,\n"
+        "  archive_error: trigger.archive_error ?? null,\n"
+        "  prompt_version: config.prompt_version,\n"
+        "  model: config.model\n"
+        "}}];"
     )
-    if old_raw in code:
-        code = code.replace(old_raw, new_raw)
-    elif "choices?.[0]?.message?.content" not in code:
-        sys.exit("ERROR: could not locate the vision-parsing line in the parse node. Aborting.")
-    return code.replace(f"$('{OLD_BUILD_NODE}')", f"$('{BUILD_NODE}')")
 
 
 def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
@@ -393,88 +451,8 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
     vision["maxTries"] = 2
     vision["waitBetweenTries"] = 1000
 
-    # 4. parse node: understand NIM's response shape + the rename
-    parse = nodes[PARSE_NODE]
-    parse["parameters"]["jsCode"] = patch_parse_code(parse["parameters"]["jsCode"])
-    # Carry the archived-photo fields through so every logged prediction points at
-    # the exact image it was made from. This is what makes a row trainable later.
-    # Tare scales with the NUMBER of containers. Subtracting a single tare from a
-    # 6-crate load under-reported the container weight by 5 tares. [fixed 2026-07-29]
-    code = parse["parameters"]["jsCode"]
-
-    # TARE REMOVED (2026-08-02). The model reports FOOD-ONLY weight, so subtracting a
-    # container tare downstream double-counted it. Removing the subtraction also
-    # removes resolveContainer's fuzzy keyword matching from the weight path — that
-    # lookup could resolve the same photo to different containers on different runs,
-    # which is exactly the kind of nondeterminism we do not want in a logged number.
-    # container_type / container_count are still recorded, they just no longer alter it.
-    if "TARE_REMOVED" not in code:
-        code = code.replace(
-            "  ? Math.max(0, rawWeight - totalTare)",
-            "  ? Math.max(0, rawWeight)   // TARE_REMOVED: model already reports food-only weight")
-        code = code.replace(
-            "  ? Math.max(0, rawWeight - container.tare_lbs)",
-            "  ? Math.max(0, rawWeight)   // TARE_REMOVED: model already reports food-only weight")
-        code = code.replace(
-            "const totalTare = container.tare_lbs * containerCount;",
-            "const totalTare = 0;   // TARE_REMOVED 2026-08-02")
-        code = code.replace(
-            "  tare_lbs: totalTare,",
-            "  tare_lbs: 0,\n  tare_applied: false,")
-        code = code.replace("  tare_lbs_each: container.tare_lbs,\n", "")
-        # Write back immediately — this must not depend on any later branch running.
-        parse["parameters"]["jsCode"] = code
-
-    if "containerCount" not in code:
-        code = code.replace(
-            "const container = resolveContainer(vision);",
-            "const container = resolveContainer(vision);\n"
-            "// How many containers of this item are in the zone (v0.5 counting contract).\n"
-            "const containerCount = Number.isFinite(vision.container_count) && vision.container_count > 0\n"
-            "  ? Math.round(vision.container_count) : 1;\n"
-            "const totalTare = container.tare_lbs * containerCount;")
-        code = code.replace(
-            "  ? Math.max(0, rawWeight - container.tare_lbs)",
-            "  ? Math.max(0, rawWeight - totalTare)")
-        code = code.replace(
-            "  tare_lbs: container.tare_lbs,",
-            "  tare_lbs: 0,                 // TARE_REMOVED — kept as a column for history\n"
-            "  tare_applied: false,\n"
-            "  container_count: containerCount,\n"
-            "  container_fill_fraction: vision.container_fill_fraction ?? null,")
-        parse["parameters"]["jsCode"] = code
-
-    if "image_url:" not in parse["parameters"]["jsCode"]:
-        parse["parameters"]["jsCode"] = parse["parameters"]["jsCode"].replace(
-            "  prompt_version: config.prompt_version,",
-            "  image_url: trigger.image_url ?? null,\n"
-            "  image_sha256: trigger.image_sha256 ?? null,\n"
-            "  image_bytes: trigger.image_bytes ?? null,\n"
-            "  archive_error: trigger.archive_error ?? null,\n"
-            "  prompt_version: config.prompt_version,")
-
-    # Physical sanity bound. The 6ft x 6ft zone cannot plausibly hold more than a
-    # couple thousand pounds; an estimate above the bound almost always means the
-    # model over-counted containers. Flag it and drop confidence rather than logging
-    # a confident absurdity. The raw number is still recorded for review.
-    parse_code = parse["parameters"]["jsCode"]
-    if "IMPLAUSIBLE_LBS" not in parse_code:
-        parse_code = parse_code.replace(
-            "return [{ json: {",
-            "const IMPLAUSIBLE_LBS = 2000;\n"
-            "const implausible = typeof adjustedWeight === 'number' && adjustedWeight > IMPLAUSIBLE_LBS;\n"
-            "const vFlags = Array.isArray(vision.known_failure_flags) ? vision.known_failure_flags.slice() : [];\n"
-            "if (implausible) vFlags.push('implausible_weight_review');\n\n"
-            "return [{ json: {",
-            1)
-        parse_code = parse_code.replace(
-            "  bias_multiplier: multiplier,",
-            "  known_failure_flags: vFlags,\n"
-            "  implausible_weight: implausible,\n"
-            "  confidence: implausible ? Math.min(vision.confidence ?? 0.5, 0.3) : (vision.confidence ?? null),\n"
-            "  bias_multiplier: multiplier,",
-            1)
-        parse["parameters"]["jsCode"] = parse_code
+    # 4. parse node: owned in full, like the build and Farmbrite nodes.
+    nodes[PARSE_NODE]["parameters"]["jsCode"] = parse_vision_code()
 
     # Shape response is ALL the relay (and therefore the CSV and the iPad) ever sees,
     # so anything worth logging or showing must be listed here explicitly.
@@ -509,6 +487,10 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
             "  model: parsed.model ?? null,",
             1)
 
+    if shape:
+        shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
+            "// Unified response shape for the PWA.",
+            "// What the relay gets back. The iPad screen and the CSV read these fields.", 1)
     if shape and "farmbrite_skipped_reason" not in shape["parameters"]["jsCode"]:
         shape["parameters"]["jsCode"] = shape["parameters"]["jsCode"].replace(
             "  farmbrite_pending: farmbriteSkipped,",
@@ -519,8 +501,11 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
 
     # Farmbrite: replace the "skipped (pending key)" stub with a real draft-order write.
     skip = nodes.get(FARMBRITE_SKIP_NODE)
-    fb_cred = (REPO / ".n8n-farmbrite-credential-id")
-    if skip is not None and fb_cred.exists():
+    fb_cred = credential_id(wf, FARMBRITE_NODE, "N8N_FARMBRITE_CREDENTIAL_ID", ".n8n-farmbrite-credential-id")
+    if skip is not None and not fb_cred:
+        print(f"warning     -> no Farmbrite credential id; the Farmbrite nodes are left as they are. "
+              f"Attach {FARMBRITE_CREDENTIAL_NAME!r} to {FARMBRITE_NODE!r} or export N8N_FARMBRITE_CREDENTIAL_ID.")
+    if skip is not None and fb_cred:
         pos = skip.get("position", [0, 0])
         builder = {
             "id": str(uuid.uuid4()), "name": FARMBRITE_BUILD_NODE,
@@ -539,8 +524,7 @@ def transform(wf: dict, system_prompt: str, cred_id: str) -> dict:
                 "jsonBody": "={{ JSON.stringify($json.order_body) }}",
                 "options": {"timeout": 20000},
             },
-            "credentials": {"httpHeaderAuth": {"id": fb_cred.read_text().strip(),
-                                               "name": FARMBRITE_CREDENTIAL_NAME}},
+            "credentials": {"httpHeaderAuth": {"id": fb_cred, "name": FARMBRITE_CREDENTIAL_NAME}},
             # Farmbrite being down must never fail the volunteer's tap — the Sheet row
             # and the photo are already safe by this point.
             "onError": "continueRegularOutput",
@@ -731,7 +715,7 @@ def main() -> None:
     backup.write_text(json.dumps(live, indent=2))
     print(f"backup      -> {backup.relative_to(REPO)}")
 
-    candidate = transform(json.loads(json.dumps(live)), load_system_prompt(), find_credential_id())
+    candidate = transform(json.loads(json.dumps(live)), load_system_prompt(), find_credential_id(live))
 
     problems = verify(candidate)
     if problems:

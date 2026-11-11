@@ -41,6 +41,10 @@ assert.strictEqual(huge.implausible_weight, true);
 assert.ok(huge.confidence <= 0.3, `confidence ${huge.confidence}`);
 assert.ok(huge.known_failure_flags.includes('implausible_weight_review'));
 
+// The model's container_type is logged as it came, even when the notes name another container.
+const crate = parse('crate, notes mention a pallet', reading({ weight_lbs: 40, container_type: 'crate', notes: 'next to a wooden pallet outside the tape' }));
+assert.strictEqual(crate.container_type, 'crate');
+
 // A negative weight is logged as 0.
 assert.strictEqual(parse('-5 lb', reading({ weight_lbs: -5 })).weight_lbs, 0);
 
