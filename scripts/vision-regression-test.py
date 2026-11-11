@@ -41,8 +41,19 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-RELAY_URL = "https://<vercel-app-host>/api/donate"
+
+
+def relay_url() -> str:
+    """Read RELAY from make-ipad-script.py, so a fork sets its Vercel URL in one place."""
+    src = (REPO / "scripts" / "make-ipad-script.py").read_text()
+    m = re.search(r'^RELAY\s*=\s*"([^"]+)"', src, re.M)
+    return m.group(1) if m else ""
+
+
+RELAY_URL = relay_url()
 VOID_URL = RELAY_URL.replace("/api/donate", "/api/void")
+
+
 def production_model() -> str:
     """Read the model production actually uses, so this suite can never silently test
     a different one (it was pinned to llama-3.2-90b while production ran nemotron)."""
@@ -55,7 +66,7 @@ MODEL = production_model()
 NEGATIVE = REPO / "demo" / "test-images" / "dock-empty-night-IR.jpg"   # REAL frame from the mounted camera, empty zone, night IR
 NEGATIVE_OLD = REPO / "demo" / "test-images" / "IMG_0739.JPG"
 POSITIVE_TITLE = "File:Obstmarktstand Marburg Firmanei1.jpg"
-UA = {"User-Agent": "aperture-vision-regression/1.0 (owner@example.com)"}
+UA = {"User-Agent": "aperture-vision-regression/1.0"}
 PARROT_VALUES = {"weight_lbs": 48.4, "confidence": 0.82, "pixels_per_inch": 2.3,
                  "estimated_volume_cu_in": 1728}
 
@@ -80,8 +91,12 @@ def system_prompt() -> str:
 
 def shrink(src: Path, max_px: int = 1600) -> bytes:
     out = Path(tempfile.gettempdir()) / f"aperture-rt-{src.stem}.jpg"
-    subprocess.run(["sips", "-Z", str(max_px), str(src), "--out", str(out)],
-                   capture_output=True, check=False)
+    try:
+        subprocess.run(["sips", "-Z", str(max_px), str(src), "--out", str(out)],
+                       capture_output=True, check=False)
+    except FileNotFoundError:   # sips is macOS-only
+        print(f"  ! sips not found: sending {src.name} at full size, not {max_px} px like the iPad")
+        return src.read_bytes()
     return out.read_bytes() if out.exists() else src.read_bytes()
 
 
@@ -137,6 +152,8 @@ def ask_relay(image: bytes, label: str) -> dict:
             result = json.load(resp)
     except urllib.error.HTTPError as exc:
         result = {"error": exc.read()[:300].decode(errors="replace")}
+    except (urllib.error.URLError, TimeoutError) as exc:
+        result = {"error": f"relay unreachable: {exc}"}
     result.setdefault("donation_id", donation_id)
     return result
 
@@ -161,6 +178,8 @@ def main() -> None:
     ap.add_argument("--e2e", action="store_true", help="test through the live production relay")
     args = ap.parse_args()
 
+    if args.e2e and "<" in RELAY_URL:
+        sys.exit("ERROR: set RELAY in scripts/make-ipad-script.py to your Vercel URL first.")
     key = None if args.e2e else nim_key()
     ask = (lambda img, label: ask_relay(img, label)) if args.e2e else (
         lambda img, label: ask_nim(img, key, "Kale" if "phantom" in label else "—"))
