@@ -16,7 +16,7 @@ been checked live.
 | Relay | Next.js route `/api/donate` (archives photo, forwards, writes record) | Vercel, `<vercel-app-host>` | live |
 | Relay auth | device token `APERTURE_DEVICE_TOKEN`, sent as `x-aperture-token` | Vercel env | open until the variable is set |
 | Orchestration | n8n workflow `<n8n-workflow-id>`, **17 nodes**, active | n8n Cloud, project **Main** | live |
-| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.8-scene** (v0.9-board is committed, not deployed) | NIM (hosted) | 9.8-12.5 s per tap |
+| Vision | `nvidia/nemotron-nano-12b-v2-vl` via NVIDIA NIM, prompt **v0.8-scene** (v0.9-board is committed, not deployed) | NIM (hosted) | 9.8-12.5 s per tap (on v0.6-net, 2026-08-02) |
 | Log | Google Sheet `Donations` | Google | live |
 | Photo + record store | Vercel Blob, **private** store `<blob-store>` | Vercel | live |
 | Export | `/api/export` → CSV (`?format=json`, `?since=YYYY-MM-DD`) | Vercel | live |
@@ -36,7 +36,7 @@ Everything below is reachable from any machine with this repo and the credential
 |---|---|---|
 | Vision model, prompt, weight logic, Farmbrite mapping, Sheet columns | edit `prompts/weight-estimation.md` or `scripts/rewire-n8n-ipad-nim.py`, then run the script | backs up + verifies + reads back; `--restore` rolls back |
 | Relay behaviour, CSV export, timeouts | edit `app/`, `vercel --prod` | previous deployment is one click away in the Vercel dashboard |
-| Swap the vision provider | create an n8n credential, point the vision node at it | one credential change |
+| Swap the vision provider | set `NIM_URL`, `NIM_MODEL` and `NIM_CREDENTIAL_NAME` in `scripts/rewire-n8n-ipad-nim.py`, create that credential in n8n, run the script | `vision-regression-test.py` still calls NIM directly |
 | Farmbrite product map | edit `PRODUCT_MAP` in `scripts/rewire-n8n-ipad-nim.py` from `GET /v1/products` (§8), then run the script | same as the first row |
 | **The iPad script itself** | see §3, iCloud Drive | file edit, no visit |
 | Check health from anywhere | `python3 scripts/vision-regression-test.py --e2e` | writes real test records, then voids each one; the Sheet rows stay |
@@ -98,8 +98,8 @@ been done to make them as good as possible without ground truth:
 
 - Container counting instead of pile-volume guessing.
 - Tare removed (it double-subtracted).
-- `temperature: 0` and a deterministic weight path; same image gives the same number
-  (measured 60/60/60 lb across three runs).
+- `temperature: 0`. One image gave 60/60/60 lb across three runs on
+  nemotron-nano-12b with prompt v0.6-net (2026-08-02). Not re-measured since v0.7.
 - A >2000 lb flag: any reading over 2000 lb gets `implausible_weight_review`. It flags
   the reading for review and does not block the write.
 
@@ -112,11 +112,11 @@ compared, treat the numbers as **operational record and trend**, not audited pou
 
 | Item | Symptom when it lapses | Fix |
 |---|---|---|
-| NVIDIA NIM free credits | every tap fails (401/429) | swap the n8n vision credential to another provider |
+| NVIDIA NIM free credits | every tap fails (401/429) | point `NIM_URL`/`NIM_MODEL` at another OpenAI-compatible provider and rerun the rewire script |
 | Camera DHCP lease (unless reserved) | every tap fails, "can't reach the camera" | reserve the IP on the Eero |
 | Google Sheets OAuth in n8n | Sheet rows stop; photo + record still safe | re-authorise the n8n credential |
 | Farmbrite token (a user-scoped token) | Farmbrite entries stop; taps unaffected | move to a dedicated integration user |
-| Vercel Blob free tier (~1 GB ≈ 4,000 photos) | archiving stops, `archive_error` set; taps unaffected | prune old photos or upgrade |
+| Vercel Blob free tier (1 GB; photo size not measured) | archiving stops, `archive_error` set; taps unaffected | prune old photos or upgrade |
 | n8n Cloud monthly execution cap | **all taps fail** | verify the plan's ceiling against volume |
 
 Nothing currently alerts on any of these.

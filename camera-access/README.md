@@ -12,5 +12,4 @@ from the internet and there is no on-site computer. Setup: `ipad/README.md` and
 
 Four other routes came first: a Cloudflare Tunnel to the camera, the Hik-Connect cloud,
 a camera-initiated HTTP push, and n8n hosted on the LAN. Hik-Connect proved dead for
-this camera and the rest need an always-on box. They are in git history:
-`git log --all -- camera-access/README.md`.
+this camera and the rest need an always-on box.

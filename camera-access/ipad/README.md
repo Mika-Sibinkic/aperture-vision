@@ -48,10 +48,10 @@ To run setup again, pick **Re-enter settings** from the in-app menu.
 ## Backend status (2026-08-02)
 
 Vercel relay → n8n (17 nodes, active) → NVIDIA NIM `nvidia/nemotron-nano-12b-v2-vl`,
-prompt v0.8-scene → Google Sheet + Farmbrite draft order. On 2026-08-02 a real POST
-returned 200 in 9.8-12.5 s and wrote a row, both regression controls passed
-(`python3 scripts/vision-regression-test.py --e2e`), and the system check passed on the
-dock. Run the system check again after any network change.
+prompt v0.8-scene → Google Sheet + Farmbrite draft order. A real POST on prompt
+v0.6-net returned 200 in 9.8-12.5 s and wrote a row (2026-08-02). The three regression
+controls passed on v0.8-scene the same night, and the system check passed on the dock.
+Run the system check again after any network change.
 
 ## Auth
 
@@ -63,6 +63,5 @@ digest path needs no camera change.
 ## Fallback
 
 If Scriptable cannot reach the camera over HTTP on some network and the camera will
-not allow Basic auth, put a small mini-PC or Pi on the LAN to pull the frame instead.
-The bridge-era `bridge/mac_bridge.py` did this and is in git history
-(`git log --all -- bridge/`). This is the only path that needs hardware.
+not allow Basic auth, put a small mini-PC or Pi on the LAN that pulls the frame and
+posts it to the relay. This is the only path that needs hardware.

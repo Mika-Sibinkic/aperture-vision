@@ -53,7 +53,8 @@ push, plus `scripts/check-ipad-script.sh`.
 
 `python3 scripts/vision-regression-test.py` sends the control frames straight to NIM
 with the committed prompt and the production model, and writes nothing anywhere. It
-needs a NIM key in `SECRETS.local.md` and spends NIM credits. `--e2e` sends three
+reads the NIM key from `NIM_API_KEY` (or an `nvapi-` key in a gitignored
+`SECRETS.local.md`) and spends NIM credits. `--e2e` sends three
 control frames through your relay instead, prints the item and weight for each, and
 voids them. Their Sheet rows stay: two say `REGRESSION TEST`, and the phantom
 control's says `Kale`. The script shrinks frames with macOS `sips`; elsewhere it sends
@@ -87,7 +88,7 @@ iPad (Scriptable)                          n8n Cloud (aperture-workflow-ipad-nim
 - **No learned corrections.** The weight node logs the model's number as it comes,
   clamped at 0 and flagged over 2000 lb. An earlier offline training loop scored a
   different model on product photos, so its corrections would not have fit
-  production. It is in git history.
+  production.
 
 ## Why it is built this way
 
@@ -114,8 +115,8 @@ Change these for your site:
   regression test reads both from there. The `CONFIG` block in
   `camera-access/ipad/aperture-pull.js` holds the same two as defaults for a build
   set up by hand on the iPad.
-- **`PRODUCT_MAP` and `NIM_MODEL`** in `scripts/rewire-n8n-ipad-nim.py`. Edit them
-  there, not in the n8n node: the next rewire overwrites the node.
+- **`PRODUCT_MAP`, `NIM_URL` and `NIM_MODEL`** in `scripts/rewire-n8n-ipad-nim.py`.
+  Edit them there, not in the n8n nodes: the next rewire overwrites the nodes.
 - **The Sheet ID** in the **Append to Google Sheet** node.
 
 1. **n8n.** Import `n8n/aperture-workflow-ipad-nim.json` and follow `n8n/README.md`.
@@ -134,7 +135,9 @@ Change these for your site:
 5. **Vercel + Blob.** Deploy this repo to Vercel, create a private Blob store, and set
    the variables in the table below.
 6. **iPad build.** Set `RELAY` in `scripts/make-ipad-script.py` to your Vercel URL.
-   Put the camera's address and login in a gitignored `SECRETS.local.md` as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
+   Export the camera as `CAMERA_URL` (`http://<camera-ip>`), `CAMERA_USER` and
+   `CAMERA_PASS`, or put two lines in a gitignored `SECRETS.local.md`:
+   ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
    Export `APERTURE_DEVICE_TOKEN` (the same value as in Vercel), run
    `python3 scripts/make-ipad-script.py`, then follow
    `camera-access/ipad/ONSITE-CARD.md`.
@@ -166,10 +169,13 @@ Files that are local on purpose are not in the repo:
 - Across the first 10 live records the model's confidence took only two values, 0.85
   and 0.95. With no scale weights there is no way to check it, so no operator screen
   shows it.
-- The committed workflow has three changes that are not deployed yet. Prompt
+- Nothing committed on 2026-11-11 is deployed. That includes the relay fixes in
+  CHANGELOG 1.0.0, the iPad build, and three workflow changes: prompt
   v0.9-board gives the board's real 4 in squares; live still says 6 in. The Farmbrite
   matcher fix is what `test_farmbrite_match.js` checks. The weight node rewrite logs
   the model's `container_type` as it came. v0.9 has not been run against NIM.
+- No measurement shows the board changes the estimate: live prompt v0.8 has given the
+  wrong square size since 2026-08-02 and no output could show it.
 
 ## Security
 

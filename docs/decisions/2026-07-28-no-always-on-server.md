@@ -80,8 +80,8 @@ can be off when someone walks up to donate.
   again". The Dell is never a Cul2vate dependency.
 - Harder / committed to: capture requires the iPad to be present and on the Cul2vate
   Wi-Fi, so unattended/hands-off capture is out until the low-cost LAN box is added. Vision
-  depends on NIM's free credits; if they run dry, swapping providers is a single n8n
-  credential edit (any OpenAI-compatible vision endpoint), not an architecture change.
+  depends on NIM's free credits; if they run dry, swapping providers is a config edit and one
+  rewire run (any OpenAI-compatible vision endpoint), not an architecture change.
 - Watch: n8n Cloud plan execution limits, and Google Sheets OAuth token refresh in
   n8n, the two managed-service dependencies that can expire quietly. Both surface via
   the `--e2e` regression probe above, runnable from anywhere without visiting the site.

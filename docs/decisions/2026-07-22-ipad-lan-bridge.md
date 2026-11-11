@@ -30,8 +30,8 @@ verification_probe: |
 rollback:
   commit: "feat(camera): iPad on-tap LAN bridge for the mounted Hikvision" (2026-07-22)
   steps:
-    - Revert app/api/donate/route.ts image_b64 passthrough (git revert of this change set)
-    - Leave the mounted-camera path unused; fall back to a LAN mini-PC running the bridge, which is in git history (`git log --all -- bridge/`)
+    - Remove the image_b64 passthrough from app/api/donate/route.ts
+    - Leave the mounted-camera path unused; fall back to a mini-PC on the LAN that pulls the frame and posts it to the relay
     - n8n vision node: revert base URL from NIM back to prior OpenAI credential if changed
 superseded_by:
 ---

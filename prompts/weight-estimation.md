@@ -48,7 +48,7 @@ Re-run both any time: `python3 scripts/vision-regression-test.py`.
 
 Production model since 2026-08-01 (prompt v0.5): `nvidia/nemotron-nano-12b-v2-vl` on
 NVIDIA NIM. It replaced `meta/llama-3.2-90b-vision-instruct` because the 90b's slow
-runs went past the 15 s a tap is allowed (commit `04dddad`). The v0.4 results above
+runs went past the 15 s a tap is allowed. The v0.4 results above
 predate the switch. The v0.6-v0.8 results below were recorded after it, on 2026-08-02.
 `llama-3.2-11b-vision` was rejected earlier; it returns narrative prose instead of JSON.
 
@@ -267,4 +267,4 @@ Return the JSON object now.
 ```
 
 The captured JPEG is attached as the vision input. That's the whole call. Every
-caller sends `eval_mode: false`; the training loop that sent `true` is in git history.
+caller sends `eval_mode: false`.
