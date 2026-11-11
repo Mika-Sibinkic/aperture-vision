@@ -112,10 +112,13 @@ describe("a failed n8n call does not block the retry", () => {
     ["n8n 500", () => new Response("node threw", { status: 500 })],
     ["empty n8n body", () => new Response("")],
     ["n8n unreachable", () => Promise.reject(new TypeError("fetch failed"))],
+    // n8n's Respond node defaults to 200, so a refused shared token arrives as ok.
+    ["n8n 200 with an error body", () => new Response(JSON.stringify({ error: "invalid token" }))],
   ])("%s: the photo is released and the retry reaches n8n", async (_label, firstReply) => {
     n8n.mockImplementationOnce(firstReply);
     const first = await post({ donation_id: ID, image_b64: PHOTO });
     expect(first.status).toBeGreaterThanOrEqual(500);
+    expect(put.mock.calls.some(([pathname]) => pathname.startsWith("records/"))).toBe(false);
 
     const retry = await post({ donation_id: ID, image_b64: PHOTO });
     expect(retry.status).toBe(200);

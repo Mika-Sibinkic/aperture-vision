@@ -184,25 +184,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let parsed: Record<string, unknown>;
     try {
-      const parsed = JSON.parse(text);
-      await writeRecord(
-        {
-          ...(parsed as Record<string, unknown>),
-          donation_id: donationId,
-          triggered_at: triggeredAt,
-          location: payload.location,
-          description: payload.description,
-          image_url: archive.url,
-          image_sha256: archive.sha256,
-          image_bytes: archive.bytes,
-          source: payload.source,
-          logged_at: new Date().toISOString(),
-        },
-        donationId,
-        triggeredAt
-      );
-      return NextResponse.json(parsed);
+      parsed = JSON.parse(text);
     } catch {
       // An empty body here means the workflow ended without hitting a Respond node
       // (usually a node threw). Say so plainly instead of showing a bare blank.
@@ -212,6 +196,29 @@ export async function POST(req: NextRequest) {
       await releasePhoto(archive);
       return NextResponse.json({ error: detail }, { status: 502 });
     }
+    // n8n's Respond node answers 200 unless told otherwise, so a refused shared token
+    // arrives here as {"error": ...}. That is not a donation: log nothing.
+    if (parsed && typeof parsed.error === "string") {
+      await releasePhoto(archive);
+      return NextResponse.json({ error: `n8n: ${parsed.error.slice(0, 500)}` }, { status: 502 });
+    }
+    await writeRecord(
+      {
+        ...parsed,
+        donation_id: donationId,
+        triggered_at: triggeredAt,
+        location: payload.location,
+        description: payload.description,
+        image_url: archive.url,
+        image_sha256: archive.sha256,
+        image_bytes: archive.bytes,
+        source: payload.source,
+        logged_at: new Date().toISOString(),
+      },
+      donationId,
+      triggeredAt
+    );
+    return NextResponse.json(parsed);
   } catch (e) {
     // On our own timeout n8n may still finish and log the tap, so keep the photo and
     // let the retry get a 409. Any other fetch error means n8n never answered.
