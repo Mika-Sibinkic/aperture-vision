@@ -27,3 +27,5 @@ tsconfig.tsbuildinfo
 training-loop/learning/state/
 training-loop/images/
 training-loop/labels/
+next-env.d.ts
+AGENTS.md
