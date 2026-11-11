@@ -639,10 +639,11 @@ def redacted_for_commit(wf: dict) -> str:
 
     The workflow carries APERTURE_SHARED_TOKEN inline (Verify Token node) and older
     versions carried BRIDGE_TOKEN. Committed n8n JSON must never contain them — see
-    the secrets convention in AGENTS.md. Backups keep the real values and are
-    gitignored, because a rollback needs them verbatim.
+    the secrets convention in CLAUDE.md. Backups keep the real values and are
+    gitignored, because a rollback needs them verbatim. pinData is dropped because it
+    holds a captured webhook request, including the caller's IP address.
     """
-    text = json.dumps(wf, indent=2)
+    text = json.dumps({k: v for k, v in wf.items() if k != "pinData"}, indent=2)
     return re.sub(r"\b[0-9a-f]{64}\b", "REDACTED-see-SECRETS.local.md", text)
 
 

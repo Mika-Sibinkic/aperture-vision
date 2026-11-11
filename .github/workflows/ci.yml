@@ -17,8 +17,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r training-loop/requirements.txt -r demo/requirements.txt
       - run: python -m pytest -q training-loop demo/test_charuco.py
-      - name: n8n workflow JSON parses
-        run: python -c "import glob, json; [json.load(open(f)) for f in glob.glob('n8n/*.json')]"
+      - name: n8n workflow JSON parses and carries no pinData (captured requests)
+        run: python -c "import glob, json; bad = [f for f in glob.glob('n8n/*.json') if json.load(open(f)).get('pinData')]; assert not bad, bad"
       - run: node scripts/test_farmbrite_match.js
 
   web:
@@ -32,6 +32,6 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run build
-      - run: npm test --if-present
+      - run: npm test
       - run: npm audit --omit=dev --audit-level=critical
       - run: bash scripts/check-ipad-script.sh

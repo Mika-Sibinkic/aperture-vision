@@ -859,49 +859,6 @@
     "templateCredsSetupCompleted": true
   },
   "nodeGroups": [],
-  "pinData": {
-    "Webhook: donation button": [
-      {
-        "json": {
-          "headers": {
-            "host": "<n8n-host>",
-            "user-agent": "curl/8.7.1",
-            "content-length": "91",
-            "accept": "*/*",
-            "accept-encoding": "gzip, br",
-            "cdn-loop": "cloudflare; loops=1; subreqs=1",
-            "cf-connecting-ip": "45.16.9.147",
-            "cf-ew-via": "15",
-            "cf-ipcountry": "US",
-            "cf-ray": "9ed8552a2edfb229-ATL",
-            "cf-visitor": "{\"scheme\":\"https\"}",
-            "cf-worker": "n8n.cloud",
-            "content-type": "application/json",
-            "x-aperture-token": "REDACTED-see-SECRETS.local.md",
-            "x-forwarded-for": "45.16.9.147, 108.162.238.150",
-            "x-forwarded-host": "<n8n-host>",
-            "x-forwarded-port": "443",
-            "x-forwarded-proto": "https",
-            "x-forwarded-server": "traefik-prod-users-gwc-41-54894b8556-7bxhp",
-            "x-is-trusted": "yes",
-            "x-real-ip": "45.16.9.147"
-          },
-          "params": {},
-          "query": {},
-          "body": {
-            "description": "smoke test v2",
-            "location": "Cul2vate",
-            "triggered_at": "2026-04-17T03:30:00Z"
-          },
-          "webhookUrl": "https://<n8n-host>/webhook/aperture-donate",
-          "executionMode": "production"
-        },
-        "pairedItem": {
-          "item": 0
-        }
-      }
-    ]
-  },
   "versionId": "751f67b0-3c1e-4d9d-878a-cc97d04f4a75",
   "activeVersionId": "751f67b0-3c1e-4d9d-878a-cc97d04f4a75",
   "versionCounter": 112,
