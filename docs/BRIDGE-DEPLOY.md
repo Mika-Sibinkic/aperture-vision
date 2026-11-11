@@ -1,5 +1,7 @@
 # Aperture bridge: Dell G7 deployment
 
+> Superseded by `docs/OPERATIONS.md`. Kept as history; do not follow it for a new install.
+
 The bridge is a small FastAPI service that runs 24/7 on the Dell G7. It
 authenticates to Hik-Connect on your behalf, pulls fresh JPEGs from the
 camera at Cul2vate, and exposes them to n8n via a bearer-token-protected

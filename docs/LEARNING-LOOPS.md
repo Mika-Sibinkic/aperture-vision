@@ -1,5 +1,10 @@
 # Aperture: learning loops architecture
 
+> Design, not running. The code in `training-loop/learning/` exists. Its systemd timer
+> (`bridge/systemd/aperture-learning.timer`) was written for the Dell G7, which no longer
+> runs, and the live workflow does not read the output: **Parse vision + tare + bias**
+> uses empty bias and density tables.
+
 The system is designed so every real donation yields training signal that
 tightens future predictions. Each component has its own RL loop, with
 safeguards preventing drift, convergence-to-self, and single-sample

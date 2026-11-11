@@ -1,19 +1,42 @@
-# Phase 2: RL training loop (design)
+# Training loop: hidden-weight evaluation
 
-**Scope of this file:** design + stubs. Full build is the follow-up chat.
+> **`run_cycle.py` is not offline and can cost money.** It downloads product photos
+> from Open Food Facts, then, if `OPENAI_API_KEY` is set, sends a batch of them to
+> gpt-4o. Those are paid calls. `APERTURE_SCRAPE_N` and `APERTURE_EVAL_N` set the batch
+> sizes. Without the key it scrapes and rebuilds the bias table only.
 
-## The core mechanic
+The offline check is the unit test:
 
-A prediction-residual-update loop that runs independently of production
-donations. It ingests **images with known weights**, hides the weight from
-the vision model, asks the model to predict, computes residual, and uses
-residuals to refine the prompt + per-item bias table.
+```bash
+pip install -r training-loop/requirements.txt pytest
+python -m pytest -q training-loop
+```
+
+It runs one test, `test_hidden_weight.py`, which proves the known weight never reaches
+the vision prompt. CI runs it on every push.
+
+## The mechanic
+
+Feed the model images whose weight is known, hide the weight, ask for a prediction,
+and record the residual. Residuals become a per-item bias multiplier.
 
 ```
- scrape ─▶ curate ─▶ strip metadata ─▶ predict ─▶ residual ─▶ update rules ─▶ redeploy prompt
-   ▲                                                                                │
-   └────────────────── continuous feed (cron-scheduled) ────────────────────────────┘
+ scrape ─▶ strip weight ─▶ predict ─▶ residual ─▶ bias table
 ```
+
+None of this runs on a schedule, and the live workflow does not apply the bias table
+yet: **Parse vision + tare + bias** in `n8n/aperture-workflow-ipad-nim.json` uses an
+empty table.
+
+## Who writes `public/bias-table.json`
+
+`build_bias_table.py` owns it. It aggregates `residuals.jsonl` into one multiplier per
+item and writes `../public/bias-table.json`. Classes with fewer than `--min-samples`
+(default 5) residuals stay out, and a move larger than `--max-delta` (default 0.2) is
+clamped and flagged. `run_cycle.py` calls it as its last step.
+
+`learning/run_cycle.py` also writes the same file, from Google Sheet ground truth. The
+last one to run wins, so run one or the other.
 
 ## Data requirements
 
@@ -31,31 +54,28 @@ Every training sample must have:
 
 ## Sources (ranked)
 
-1. USDA FoodData Central: has canonical weights per serving for raw
-   produce, canned goods, bulk items. Not images; pair with #2.
-2. Open Food Facts: 2M+ product photos with net weights in grams/oz.
-   Best single source; API is free.
-3. Farmbrite's own Cul2vate history: past harvest records that include
-   photo + weight. Gold standard; same distribution as production.
-4. Aperture's own production history: once the client contact starts logging real
-   weights via paper scale for the first N weeks, each of those is a
-   residual sample.
-5. Synthetic generation: LAST resort (per feedback_real_data_not_synthetic).
-   Only useful for rare/edge item types where no real photos exist.
+1. USDA FoodData Central: canonical weights per serving for raw produce, canned
+   goods and bulk items. No images; pair with #2.
+2. Open Food Facts: product photos with net weights. Free API. This is what
+   `scraper.py` pulls today.
+3. Farmbrite's own Cul2vate history: past harvest records with photo and weight.
+   Same distribution as production. See `FARMBRITE-EXTRACTION.md`.
+4. Aperture's own production history, once real weights come back through
+   `/api/correct` (not wired yet).
+5. Synthetic generation: last resort, only for rare items with no real photos. Use
+   real data. A blank is better than a fabricated sample.
 
 ## Hidden-weight protocol
 
 The model **must never see the known weight at inference time**. Enforced by:
 
-1. Scraper saves image to `images/<sha256>.jpg` and metadata to
-   `labels/<sha256>.json`. They're separate files.
-2. Evaluator reads the image only, constructs the prompt with
-   `eval_mode: true`, receives the prediction, then loads the label.
-3. Prompt includes an explicit instruction: "If you see a weight in the
-   metadata, ignore it; it is a test probe."
-4. A unit test runs each release: feed the evaluator a sample, capture
-   every prompt/message sent to the vision API, grep for any digit+unit
-   pattern in metadata. Fail if found.
+1. `scraper.py` saves the image to `images/<sha16>.jpg` and the metadata to
+   `labels/<sha16>.json`. They are separate files.
+2. `evaluator.py` reads the image only, builds the prompt, gets the prediction, then
+   loads the label.
+3. The prompt carries `eval_mode: true` and nothing from the label.
+4. `test_hidden_weight.py` mocks the API call, captures the request body, and fails if
+   the true weight appears in it as a number with a unit.
 
 ## Residual computation
 
@@ -64,52 +84,43 @@ residual_lbs   = |weight_lbs_true - weight_lbs_predicted|
 residual_ratio = residual_lbs / weight_lbs_true
 ```
 
-We track both. Per-class aggregates:
+Per class:
 
-- Mean absolute residual (MAR): headline accuracy number
-- Mean ratio (MR): bias direction. If mean_ratio > 1 for item X, model
-  systematically overestimates X.
-- Std of ratio: consistency. High std = model guessing.
+- Mean absolute residual: the headline accuracy number.
+- Mean ratio: bias direction. Above 1 for item X means the model overestimates X.
+- Std of ratio: consistency. High std means the model is guessing.
 
-Bias corrections are applied downstream (per-class multiplier in the
-post-processing code node in n8n), NOT by retraining the model.
+Bias corrections are meant to apply downstream, as a per-class multiplier in the n8n
+parse node, not by retraining the model.
 
-## Update cadence
+## Rules
 
-- Per-sample: log residual to `residuals.jsonl` and
-  `per_class_residuals.jsonl`.
-- Weekly cron: recompute per-class bias multipliers, write to
-  `bias_table.json`. n8n reads this file and applies in Parse-vision node.
-- Monthly (manual): review the top-10 worst residuals by ratio. Are they
-  a new class? A prompt failure mode? Update `prompts/weight-estimation.md`
-  and bump the version. Residual tracking now attributes to the new prompt
-  version so we can see if the edit helped.
+- Never let the model grade itself. Only real weighed items count as ground truth.
+- If a multiplier moves more than 20% in a week, hold it for a human to approve.
+  `build_bias_table.py --max-delta` enforces this.
+- Review the ten worst residuals by hand before changing `prompts/weight-estimation.md`,
+  and bump the prompt version when you do, so residuals attribute to the new prompt.
 
-## Anti-hallucination checks
-
-Per CLAUDE.md adaptive-learning rules:
-
-- Never let the model self-evaluate. Only Mika's / Cul2vate's real-weight
-  comparisons count as ground truth.
-- After 3 sessions with zero residuals logged, trigger reality check: are
-  we sampling at all?
-- If the bias-table multipliers move by >20% in a week, freeze updates and
-  require Mika to approve before applying.
-
-## What's in this directory
+## Files
 
 ```
 training-loop/
-├── README.md              # this file
-├── scraper.py             # stub: pulls from Open Food Facts API
-├── evaluator.py           # stub: loads image, runs prompt, logs residual
-├── bias_table.json        # computed weekly; consumed by n8n
-├── requirements.txt       # minimal deps
-└── residuals.jsonl        # append-only log (not committed)
+├── README.md                 # this file
+├── run_cycle.py              # scrape → evaluate → build_bias_table (network, paid if keyed)
+├── scraper.py                # Open Food Facts (and Farmbrite) → images/ + labels/
+├── evaluator.py              # hidden-weight prediction → residuals.jsonl
+├── build_bias_table.py       # residuals.jsonl → ../public/bias-table.json
+├── test_hidden_weight.py     # the unit test
+├── learning/                 # Sheet-driven learning cycle (design, not running)
+├── FARMBRITE-EXTRACTION.md   # how to pull Cul2vate's historical records
+└── requirements.txt
 ```
 
-## Not in scope for Phase 2
+`images/`, `labels/` and `residuals.jsonl` are created on first run. They are not in
+the repo.
 
-- Fine-tuning a custom vision model. We stay on API-hosted Claude/GPT-4o.
-- Active learning (model choosing what to label next). Keep sampling random.
-- Multi-camera adaptation. Aperture v1 is single-location, single-camera.
+## Not in scope
+
+- Fine-tuning a custom vision model. The loop stays on hosted models.
+- Active learning (the model choosing what to label next). Sampling stays random.
+- Multi-camera adaptation. Aperture is single-location, single-camera.

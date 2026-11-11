@@ -205,7 +205,7 @@ pkill -f caffeinate
 
 Camera firmware freeze: follow `docs/HIK-CONNECT-SETUP.md` §5:
 
-1. Record current firmware version in `docs/FIRMWARE-FROZEN.md`
+1. Record current firmware version in the Capture row of `docs/OPERATIONS.md`
 2. Disable auto-upgrade in camera UI (usually already off)
 3. Disable Hik-Connect auto-update in the hik-connect.com dashboard if present
 4. Take a snapshot-hash baseline with `sha256sum` so firmware-triggered

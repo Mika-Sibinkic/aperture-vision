@@ -1,12 +1,28 @@
-# Camera access: 4 options
+# Camera access
 
-n8n Cloud runs off-site. The Hikvision camera lives on Cul2vate's LAN. One of
-the four options below has to bridge them. Pick **during** the site visit once
-you see what's already at Cul2vate (router model, always-on PC, etc.).
+n8n Cloud runs off-site. The Hikvision camera lives on Cul2vate's LAN. Something has to
+get a frame from one to the other.
+
+## RECOMMENDED: the iPad pulls the frame over the LAN
+
+This is what runs at Cul2vate. At the tap, the on-site iPad pulls a JPEG from the
+camera with HTTP digest auth and posts it to the relay. Nothing on the LAN is reachable
+from the internet and there is no on-site computer. Setup: `ipad/README.md` and
+`ipad/ONSITE-CARD.md`. Why: `../docs/decisions/2026-07-22-ipad-lan-bridge.md`.
+
+The four options below came first. Use one only if the iPad path cannot work on your
+network.
 
 ---
 
-## Option A: Cloudflare Tunnel on an existing Cul2vate device (RECOMMENDED)
+---
+
+## Option A: Cloudflare Tunnel on an existing Cul2vate device
+
+> **Warning:** this tunnel publishes the camera itself, not just one snapshot URL. The
+> camera's admin web UI and every ISAPI endpoint become reachable from the internet,
+> protected only by the camera password. Put a Cloudflare Access policy on the
+> hostname before you route it.
 
 **When:** Cul2vate has any always-on device on their network (old PC, Mac mini,
 an existing Raspberry Pi, or even the WiFi extender if it supports it).
@@ -27,7 +43,7 @@ cloudflared tunnel create aperture-cul2vate
 cloudflared tunnel route dns aperture-cul2vate camera.example.com
 ```
 
-Copy `cloudflared-config.yml.example` to `cloudflared-config.yml`, set the
+Copy `cloudflared-config.yml.example`, drop the `.example` suffix, set the
 tunnel UUID + credentials-file path + origin URL (the camera's local IP), then
 on the always-on device at Cul2vate:
 
@@ -106,7 +122,3 @@ webhook, not the camera).
 | What's the camera's LAN IP after Cat6 is run? | |
 | What's the WiFi extender's mgmt IP? | |
 | Does the router allow LAN→WAN outbound 443? | |
-
-The recommended default if all unknowns: **Option A using a $40 mini PC you
-bring with you pre-flashed**. Set it up on your kitchen table before the
-drive. On arrival: plug into power + Ethernet to the extender. Done.

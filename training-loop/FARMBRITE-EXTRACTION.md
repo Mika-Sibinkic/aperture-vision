@@ -1,7 +1,7 @@
 # Farmbrite historical data extraction: playbook
 
-**Goal:** pull Cul2vate's complete historical records out of Ava's admin
-Farmbrite account for use as Aperture training data (per
+**Goal:** pull Cul2vate's complete historical records out of the Cul2vate
+staff member's Farmbrite account for use as Aperture training data (per
 `README.md` §"Data requirements" and §"Sources" #3, gold standard).
 
 **Constraint:** Farmbrite's public API is beta and requires a support
@@ -31,7 +31,8 @@ Climate, Reports.
 Plantings and Resources respectively.**
 
 Every module has an **Actions menu** (`...` button next to the green
-"Create New" button) → **Download All Records**. Pull these in order:
+"Create New" button) → **Download All Records**. Save every download into one folder
+outside the repo (it is Cul2vate's data and never gets committed). Pull these in order:
 
 1. Reports → Crop Harvest Report: run with no filter, all years →
    Export CSV → `01_harvest_report.csv` (this is the richest single
@@ -52,7 +53,7 @@ Every module has an **Actions menu** (`...` button next to the green
    `08_accounting_transactions.csv` *(skip if Accounting is greyed out
    that means the user role lacks financial access)*
 9. **Contacts → Actions → Download All Records** → `09_contacts.csv`
-10. Reports → Custom Reports: if Ava built any, export each →
+10. Reports → Custom Reports: if the staff member built any, export each →
     `99_custom_reports/<name>.csv`. Custom reports often join
     harvest × product × weight × date in ways the raw CSVs don't.
 
@@ -78,14 +79,14 @@ CSV exports do **not** include photos. Before requesting an API key, we
 need to know if photos exist at all; that determines whether the data
 is gold standard (image + weight) or silver (weight only).
 
-While Ava is in Crops, click into 3-5 random crop records and check:
+While you are in Crops, click into 3-5 random crop records and check:
 
 - Is there a photo on the record? (Camera/photo tab.)
 - Are photos on **Harvest** entries individually, or only on the parent
   crop? (This matters: per-harvest photos = a real training row.)
 - Same check on Inventory Types and Products.
 
-Document findings in `training-loop/farmbrite_export_2026-04-29/PHOTO-AUDIT.md`:
+Write the findings next to the exports, in a PHOTO-AUDIT.md file:
 
 ```markdown
 ## Photo presence in Farmbrite (Cul2vate)
@@ -139,7 +140,7 @@ Three definitive tests (run in order, stop at first failure):
 | C | Profile → "Request API Access" / "API Keys" link | **Admin only** |
 
 If Test A fails: stop Track C. Forward this finding to the client contact (account
-owner) so he either elevates Ava's role to Admin, or runs the API
+owner) so he either elevates the staff member's role to Admin, or runs the API
 request himself. Tracks A + B still work for any role on the modules
 the user can see.
 
@@ -189,21 +190,16 @@ for c in crops:
 
 Once Tracks A + B are done (and C if granted), update:
 
-- `aperture/checkpoint.md`: add line under "Active workstream" noting
-  Farmbrite historical extraction complete + path to dataset
-- `aperture/training-loop/README.md`: replace "Sources #3, gold
-  standard" placeholder with actual row count + photo count
-- `memory/project_aperture.md`: update with the dataset summary so
-  future sessions know it exists
+- `training-loop/README.md`: under Sources #3, add the real row count and photo
+  count.
 
 ## Anti-patterns to avoid
 
 - Don't manually transcribe weights from screenshots. CSV has them.
 - Don't right-click-save photos one at a time. If we don't get API
-  access, build a Playwright headless scraper using Ava's session
+  access, build a Playwright headless scraper using the staff member's session
   cookie, but only after CSV is done so we know what records to target.
 - Don't filter the CSV downloads by date in the UI. Pull
   "Download All Records," filter offline.
-- Per `feedback_real_data_not_synthetic`: do not GPT-generate any
-  fake records to "fill gaps." If a harvest has no photo, the row gets
+- Use real data. Do not generate fake records to "fill gaps." If a harvest has no photo, the row gets
   flagged `image_present: false` and excluded from training; that's fine.

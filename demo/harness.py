@@ -187,7 +187,7 @@ def write_report(records: list[dict], out_md: Path, provider: str, model: str) -
               "",
               "## Honesty notes",
               "",
-              "- This is the static-mode pipeline (no in-motion capture). For EnterpriseCo's <500ms conveyor target, see `docs/EnterpriseCo-conveyor-architecture.md`.",
+              "- This is the static-mode pipeline (no in-motion capture).",
               "- Stub-provider rows in the table do NOT contribute to the accuracy distribution. Tagged in residuals.jsonl as `provider=stub`.",
               "- ChArUco quality affects accuracy directly. 'Marginal' or 'poor' quality means the pixels-per-inch number itself is unreliable, so weight error compounds.",
               ""]

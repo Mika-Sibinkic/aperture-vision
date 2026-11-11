@@ -1,5 +1,7 @@
 # Aperture: completion checklist
 
+> Superseded by `docs/OPERATIONS.md`. Kept as history; do not follow it for a new install.
+
 What's built vs what requires external credentials you'll paste in (⇨).
 The goal: you touch only ⇨ rows and then deploy.
 
