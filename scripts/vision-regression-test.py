@@ -73,9 +73,12 @@ PARROT_VALUES = {"weight_lbs": 48.4, "confidence": 0.82, "pixels_per_inch": 2.3,
 
 
 def nim_key() -> str:
+    """NIM_API_KEY from the environment, else the nvapi- key in SECRETS.local.md."""
+    if os.environ.get("NIM_API_KEY", "").strip():
+        return os.environ["NIM_API_KEY"].strip()
     secrets = REPO / "SECRETS.local.md"
     if not secrets.exists():
-        sys.exit("ERROR: SECRETS.local.md not found (gitignored; must exist locally).")
+        sys.exit("ERROR: export NIM_API_KEY, or put the key in SECRETS.local.md (gitignored).")
     m = re.search(r"nvapi-[A-Za-z0-9_-]+", secrets.read_text())
     if not m:
         sys.exit("ERROR: no NVIDIA NIM key (nvapi-...) in SECRETS.local.md.")

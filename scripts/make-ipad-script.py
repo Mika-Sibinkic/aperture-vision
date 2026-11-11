@@ -7,8 +7,9 @@ single most likely thing to go wrong on site. This bakes the settings in, so the
 on-site procedure is "import file, tap System check, tap Log a donation", with no
 password to type and no settings screens.
 
-Reads live values from SECRETS.local.md (gitignored) plus APERTURE_DEVICE_TOKEN
-from the environment (the same value set on Vercel), and writes:
+Reads the camera from CAMERA_URL, CAMERA_USER and CAMERA_PASS, or from
+SECRETS.local.md (gitignored) when they are unset, plus APERTURE_DEVICE_TOKEN from
+the environment (the same value set on Vercel), and writes:
 
     camera-access/ipad/Aperture.local.js      <- gitignored, CONTAINS THE PASSWORD
 
@@ -35,17 +36,23 @@ LOCATION = "Cul2vate, Ellington Ag Center"
 SNAPSHOT_PATH = "/ISAPI/Streaming/channels/101/picture"
 
 
-def main() -> None:
+def camera() -> tuple[str, str, str]:
+    """CAMERA_URL, CAMERA_USER and CAMERA_PASS from the environment, else SECRETS.local.md."""
+    env = [os.environ.get(k, "").strip() for k in ("CAMERA_URL", "CAMERA_USER", "CAMERA_PASS")]
+    if all(env):
+        return env[0].rstrip("/"), env[1], env[2]
     if not SECRETS.exists():
-        sys.exit(f"ERROR: {SECRETS.name} not found. It is gitignored — it must exist on this machine.")
+        sys.exit(f"ERROR: export CAMERA_URL, CAMERA_USER and CAMERA_PASS, or create {SECRETS.name} (gitignored).")
     secrets = SECRETS.read_text()
-
     ip = re.search(r"LAN:\s*`(\d+\.\d+\.\d+\.\d+)`", secrets)
     creds = re.search(r"user\s+`([^`]+)`\s*/\s*pass\s+`([^`]+)`", secrets)
     if not ip or not creds:
         sys.exit("ERROR: could not read the camera IP / admin credentials out of SECRETS.local.md.")
+    return f"http://{ip.group(1)}", creds.group(1), creds.group(2)
 
-    base, user, password = f"http://{ip.group(1)}", creds.group(1), creds.group(2)
+
+def main() -> None:
+    base, user, password = camera()
     device_token = os.environ.get("APERTURE_DEVICE_TOKEN", "")
 
     js = SOURCE.read_text()
