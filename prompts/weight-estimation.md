@@ -1,4 +1,4 @@
-# Aperture: Vision Prompt v0.8-scene
+# Aperture: Vision Prompt v0.9-board
 
 Versioned. Change the version AND commit before editing prompt text.
 `scripts/rewire-n8n-ipad-nim.py` reads the **SYSTEM PROMPT** block below verbatim
@@ -7,6 +7,15 @@ Residual tracking logs `prompt_version` so accuracy changes can be attributed to
 prompt edits vs. model edits.
 
 ---
+
+## v0.9: the board's real square size (2026-11-11)
+
+v0.8 told the model to compute pixels_per_inch from 6" squares. The board printed for
+Cul2vate has 4" squares (8x10 grid, a 32x40" pattern on a 36x44" sign; see
+`demo/README.md`). The 6" figure came from the Branch prototype's board generator. A
+model that trusted it would read every load 1.5x too large in each dimension. The only
+change is that sentence. Not yet checked against NIM or deployed: run
+`python3 scripts/vision-regression-test.py` first.
 
 ## Why v0.4 exists: the parroting bug (found 2026-07-22)
 
@@ -48,8 +57,8 @@ markedly better at, and it converts volume into arithmetic:
 
     volume = container_count x container_volume x fill_fraction
 
-`containers.json` carries per-container dimensions, which is what makes the volume
-arithmetic possible.
+No file in this repo holds container dimensions: the model supplies one container's
+volume itself. The container names live in the schema below and in the n8n parse node.
 
 ## v0.8: ground the model in the real scene (2026-08-02)
 
@@ -199,7 +208,8 @@ PROCEDURE:
      notes="outside staging zone - reposition".
    - Cannot see the zone at all: inside_zone=false, weight_lbs=null, add "zone_not_visible".
 2. Only if goods ARE in the zone: detect the ChArUco board. If you can genuinely count
-   squares, charuco_detected=true and compute pixels_per_inch from the 6" squares.
+   squares, charuco_detected=true and compute pixels_per_inch from the 4" squares
+   (8x10 grid, a 32x40" pattern).
    Otherwise charuco_detected=false, fall back to pallet scale (48"x40"), and reduce
    confidence by 0.15.
 3. Classify item_type from what is visibly present. Expect ONE item type per photo.
