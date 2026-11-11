@@ -22,10 +22,6 @@ demo/output/
 camera-access/ipad/Aperture.local.js
 n8n/backups/
 .n8n-farmbrite-credential-id
-training-loop/residuals.jsonl
 tsconfig.tsbuildinfo
-training-loop/learning/state/
-training-loop/images/
-training-loop/labels/
 next-env.d.ts
 AGENTS.md
