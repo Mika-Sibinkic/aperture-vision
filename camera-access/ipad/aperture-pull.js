@@ -106,9 +106,15 @@ function buildDigestAuth(user, pass, method, uri, wwwAuth, cnonce, nc) {
   return "Digest " + parts.join(", ");
 }
 
+// HTML-escape untrusted text (model output, error text, config) before it reaches
+// innerHTML. Also injected into the WebView page, so both sides use this one copy.
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+}
+
 // Node test hook (skipped on-device)
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { md5: md5, parseAuthHeader: parseAuthHeader, buildDigestAuth: buildDigestAuth };
+  module.exports = { md5: md5, parseAuthHeader: parseAuthHeader, buildDigestAuth: buildDigestAuth, esc: esc };
 }
 
 // ===========================================================================
@@ -332,6 +338,15 @@ async function postToRelay(cfg, b64, description, donationId) {
   return parsed;
 }
 
+async function voidDonation(cfg, donationId, reason) {
+  const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
+  v.method = "POST";
+  v.timeoutInterval = 90;
+  v.headers = relayHeaders(cfg);
+  v.body = JSON.stringify({ donation_id: donationId, reason: reason });
+  return v.loadJSON();
+}
+
 async function showResult(result) {
   // Deliberately an Alert, not a second UITable: the progress table is already on
   // screen and presenting another over it is unreliable.
@@ -394,12 +409,18 @@ async function selfTest(cfg) {
   note = "Weighing (10\u201325 s)\u2026";
   render();
 
+  // The check is a real tap, so it is voided afterwards: no CSV row, no Farmbrite draft.
+  // The Sheet row stays (n8n owns it) and is labelled by its description.
+  const checkId = UUID.string().toLowerCase();
   try {
     const res = await withTimeout(
-      postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK \u2014 ignore this row"), RELAY_TIMEOUT_S, "Server");
+      postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK \u2014 ignore this row", checkId), RELAY_TIMEOUT_S, "Server");
     const ok = Boolean(res && (typeof res.weight_lbs === "number" || res.item_type));
     steps.push({ ok: ok, name: "Weight recorded",
       detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
+    const undone = await withTimeout(voidDonation(cfg, checkId, "system check"), 90, "Undo");
+    steps.push({ ok: Boolean(undone && undone.ok), name: "Test entry removed",
+      detail: undone && undone.ok ? "" : String((undone && undone.error) || "not removed").slice(0, 120) });
   } catch (e) {
     steps.push({ ok: false, name: "Server", detail: String(e.message).slice(0, 120) });
   }
@@ -538,13 +559,8 @@ async function showHistory(cfg) {
         a.addCancelAction("Keep it");
         if ((await a.present()) !== 0) return;
 
-        const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
-        v.method = "POST";
-        v.timeoutInterval = 60;
-        v.headers = relayHeaders(cfg);
-        v.body = JSON.stringify({ donation_id: r.donation_id, reason: "undone on the iPad" });
         try {
-          const res = await v.loadJSON();
+          const res = await voidDonation(cfg, r.donation_id, "undone on the iPad");
           const done = new Alert();
           done.title = res && res.ok ? "Removed" : "Couldn't remove it";
           done.message = res && res.ok
@@ -582,11 +598,12 @@ async function showHistory(cfg) {
 // no polling.
 // ---------------------------------------------------------------------------
 function apertureHTML(location) {
-  return `<!DOCTYPE html><html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  return `<!DOCTYPE html><html lang="en"><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aperture</title>
 <style>
-:root{--bg:#f7f4ee;--card:#fff;--ink:#2a2925;--muted:#7a7268;--accent:#86b187;
---accent-pressed:#6b9b6e;--danger:#c24848;--border:#e7e2d6;--radius:22px}
+:root{--bg:#f7f4ee;--card:#fff;--ink:#2a2925;--muted:#6f675d;--accent:#5a8a5d;
+--accent-pressed:#4f7f52;--danger:#c24848;--border:#e7e2d6;--radius:22px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
 font-family:-apple-system,BlinkMacSystemFont,"SF Pro","Helvetica Neue",Arial,sans-serif;
@@ -616,8 +633,9 @@ border-radius:50%;display:inline-block;animation:s .8s linear infinite;vertical-
 .hw{font-weight:600;font-size:17px} .hi{color:var(--muted);font-size:14px}
 .undo{color:var(--danger);font-size:15px;padding:8px 14px;border:1px solid var(--border);border-radius:12px;background:#fff}
 h2{font-size:15px;color:var(--muted);font-weight:500;margin:4px 0 0}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body><main>
-<div class="header"><div class="brand">APERTURE</div><div class="loc">${location}</div></div>
+<div class="header"><div class="brand">APERTURE</div><div class="loc">${esc(location)}</div></div>
 
 <div class="card">
   <label for="item">What is the donation?</label>
@@ -626,14 +644,15 @@ h2{font-size:15px;color:var(--muted);font-weight:500;margin:4px 0 0}
 
 <button class="trigger" id="go">Log Donation</button>
 
-<div class="card" id="status">
-  <div class="muted">Place the donation inside the taped zone, type what it is, then press the green button.</div>
+<div class="card" id="status" role="status" aria-live="polite">
+  <div class="muted">Place the donation inside the taped zone, type what it is, then press Log Donation.</div>
 </div>
 
 <h2 id="rechead" style="display:none">Recent</h2>
 <div class="card" id="recent" style="display:none"></div>
 
 <script>
+${esc.toString()}
 var pending=null, resolve=null;
 function send(a){ pending=a; if(resolve){var r=resolve; resolve=null; var p=pending; pending=null; r(p);} }
 function onAsk(c){ if(pending){var p=pending; pending=null; c(p);} else { resolve=c; } }
@@ -659,8 +678,8 @@ function showResult(r){
   document.getElementById('go').textContent='Log Donation';
   document.getElementById('item').value='';
   var h = (r.weight_lbs!==null && r.weight_lbs!==undefined) ? Number(r.weight_lbs).toFixed(1)+' lbs' : 'Logged';
-  var html='<div class="headline ok">'+h+'</div>';
-  if(r.item_type) html+='<div class="row"><span class="k">Item</span><span>'+r.item_type+'</span></div>';
+  var html='<div class="headline ok">'+esc(h)+'</div>';
+  if(r.item_type) html+='<div class="row"><span class="k">Item</span><span>'+esc(r.item_type)+'</span></div>';
   html+='<div class="row"><span class="k">Recorded</span><span>'+new Date().toLocaleTimeString()+'</span></div>';
   if(r.empty) html='<div class="headline err">Nothing in the zone</div><div class="muted">Place the donation inside the yellow tape and press the button again.</div>';
   document.getElementById('status').innerHTML=html;
@@ -668,7 +687,7 @@ function showResult(r){
 function showError(m){
   document.getElementById('go').disabled=false;
   document.getElementById('go').textContent='Log Donation';
-  document.getElementById('status').innerHTML='<div class="headline err">Didn\\u2019t work</div><div class="muted">'+m+'</div>';
+  document.getElementById('status').innerHTML='<div class="headline err">Didn\\u2019t work</div><div class="muted">'+esc(m)+'</div>';
 }
 function showRecent(rows){
   var box=document.getElementById('recent'), head=document.getElementById('rechead');
@@ -676,17 +695,24 @@ function showRecent(rows){
   head.style.display='block'; box.style.display='block';
   box.innerHTML=rows.map(function(r){
     var w=(r.weight_lbs!==null&&r.weight_lbs!==undefined)?Number(r.weight_lbs).toFixed(1)+' lbs':'—';
-    return '<div class="hist"><div><div class="hw">'+w+' '+(r.item_type||'')+'</div>'+
-           '<div class="hi">'+(r.when||'')+'</div></div>'+
-           '<button class="undo" onclick="undo(\\''+r.donation_id+'\\')">Undo</button></div>';
+    var label=w+' '+(r.item_type||'');
+    return '<div class="hist"><div><div class="hw">'+esc(label)+'</div>'+
+           '<div class="hi">'+esc(r.when)+'</div></div>'+
+           '<button class="undo" data-id="'+esc(r.donation_id)+'" aria-label="Undo '+esc(label)+'">Undo</button></div>';
   }).join('');
 }
+document.getElementById('recent').addEventListener('click',function(e){
+  var b=e.target.closest('button.undo'); if(b) undo(b.getAttribute('data-id'));
+});
 function showRemoved(){
   document.getElementById('go').disabled=false;
   document.getElementById('go').textContent='Log Donation';
   document.getElementById('status').innerHTML='<div class="headline ok">Removed</div><div class="muted">That donation is no longer in the record.</div>';
 }
-function undo(id){ setBusy('Removing…'); send({type:'undo', id:id}); }
+function undo(id){
+  if(!confirm('Undo this donation?\\n\\nIt will be removed from the record and from Farmbrite. The photo is kept.')) return;
+  setBusy('Removing…'); send({type:'undo', id:id});
+}
 </script></main></body></html>`;
 }
 
@@ -742,12 +768,7 @@ async function runApp(cfg) {
       }
     } else if (action.type === "undo") {
       try {
-        const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
-        v.method = "POST";
-        v.timeoutInterval = 90;
-        v.headers = relayHeaders(cfg);
-        v.body = JSON.stringify({ donation_id: action.id, reason: "undone on the iPad" });
-        const res = await v.loadJSON();
+        const res = await voidDonation(cfg, action.id, "undone on the iPad");
         // A Farmbrite failure keeps the donation logged (the relay retries on the next Undo).
         const why = res && res.farmbrite_error
           ? "Still logged: Farmbrite did not remove the order (" + res.farmbrite_error + "). Tap Undo again."
