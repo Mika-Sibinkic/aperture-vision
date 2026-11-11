@@ -718,10 +718,7 @@ function showRemoved(){
   document.getElementById('go').textContent='Log Donation';
   document.getElementById('status').innerHTML='<div class="headline ok">Removed</div><div class="muted">Removed from Farmbrite and the export. The Sheet row is still there.</div>';
 }
-function undo(id){
-  if(!confirm('Undo this donation?\\n\\nRemove it from Farmbrite and the export? The Sheet row stays, and so does the photo.')) return;
-  setBusy('Removing…'); send({type:'undo', id:id});
-}
+function undo(id){ send({type:'undo', id:id}); }
 </script></main></body></html>`;
 }
 
@@ -776,6 +773,15 @@ async function runApp(cfg) {
         await refresh();
       }
     } else if (action.type === "undo") {
+      // Confirm with a native Alert, as the history list does. The page's confirm()
+      // depends on the WebView host implementing JS dialogs.
+      const ask = new Alert();
+      ask.title = "Undo this donation?";
+      ask.message = "Remove it from Farmbrite and the export? The Sheet row stays, and so does the photo.";
+      ask.addDestructiveAction("Undo it");
+      ask.addCancelAction("Keep it");
+      if ((await ask.present()) !== 0) return;
+      await call("setBusy('Removing\\u2026')");
       try {
         const res = await voidDonation(cfg, action.id, "undone on the iPad");
         // A Farmbrite failure keeps the donation logged (the relay retries on the next Undo).
