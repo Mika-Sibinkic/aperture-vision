@@ -563,7 +563,7 @@ async function showHistory(cfg) {
       row.onSelect = async () => {
         const a = new Alert();
         a.title = "Undo this donation?";
-        a.message = `${lbs} ${r.item_type || ""}\n${when}\n\nIt will be removed from the record and from Farmbrite. The photo is kept.`;
+        a.message = `${lbs} ${r.item_type || ""}\n${when}\n\nRemove it from Farmbrite and the export? The Sheet row stays, and so does the photo.`;
         a.addDestructiveAction("Undo it");
         a.addCancelAction("Keep it");
         if ((await a.present()) !== 0) return;
@@ -573,7 +573,7 @@ async function showHistory(cfg) {
           const done = new Alert();
           done.title = res && res.ok ? "Removed" : "Couldn't remove it";
           done.message = res && res.ok
-            ? "That donation is no longer in the record."
+            ? "Removed from Farmbrite and the export. The Sheet row is still there."
             : String((res && res.error) || "Unknown problem.");
           done.addAction("OK");
           await done.present();
@@ -640,7 +640,7 @@ border-radius:50%;display:inline-block;animation:s .8s linear infinite;vertical-
 .hist{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-top:1px solid var(--border)}
 .hist:first-child{border-top:none}
 .hw{font-weight:600;font-size:17px} .hi{color:var(--muted);font-size:14px}
-.undo{color:var(--danger);font-size:15px;padding:8px 14px;border:1px solid var(--border);border-radius:12px;background:#fff}
+.undo{color:var(--danger);font-size:15px;min-height:44px;min-width:44px;padding:8px 14px;border:1px solid var(--border);border-radius:12px;background:#fff}
 h2{font-size:15px;color:var(--muted);font-weight:500;margin:4px 0 0}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body><main>
@@ -716,10 +716,10 @@ document.getElementById('recent').addEventListener('click',function(e){
 function showRemoved(){
   document.getElementById('go').disabled=false;
   document.getElementById('go').textContent='Log Donation';
-  document.getElementById('status').innerHTML='<div class="headline ok">Removed</div><div class="muted">That donation is no longer in the record.</div>';
+  document.getElementById('status').innerHTML='<div class="headline ok">Removed</div><div class="muted">Removed from Farmbrite and the export. The Sheet row is still there.</div>';
 }
 function undo(id){
-  if(!confirm('Undo this donation?\\n\\nIt will be removed from the record and from Farmbrite. The photo is kept.')) return;
+  if(!confirm('Undo this donation?\\n\\nRemove it from Farmbrite and the export? The Sheet row stays, and so does the photo.')) return;
   setBusy('Removing…'); send({type:'undo', id:id});
 }
 </script></main></body></html>`;
