@@ -4,8 +4,8 @@ Emit a PRE-CONFIGURED copy of the iPad Scriptable script.
 
 Why: typing a camera password on a tablet keyboard in front of the client is the
 single most likely thing to go wrong on site. This bakes the settings in, so the
-on-site procedure is "import file, tap Self-test, tap Log Donation" — no typing,
-no settings screens, no chance of a typo.
+on-site procedure is "import file, tap System check, tap Log a donation", with no
+password to type and no settings screens.
 
 Reads live values from SECRETS.local.md (gitignored) plus APERTURE_DEVICE_TOKEN
 from the environment (the same value set on Vercel), and writes:
@@ -55,15 +55,15 @@ def main() -> None:
 
     configured = (
         "const CONFIG = {\n"
-        f'  base: "{base}",\n'
-        f'  user: "{user}",\n'
-        f'  pass: "{password}",\n'
-        f'  path: "{SNAPSHOT_PATH}",\n'
-        f'  relay: "{RELAY}",\n'
-        f'  exportUrl: "{RELAY.replace("/api/donate", "/api/export")}",\n'
-        f'  voidUrl: "{RELAY.replace("/api/donate", "/api/void")}",\n'
+        f"  base: {json.dumps(base)},\n"
+        f"  user: {json.dumps(user)},\n"
+        f"  pass: {json.dumps(password)},\n"
+        f"  path: {json.dumps(SNAPSHOT_PATH)},\n"
+        f"  relay: {json.dumps(RELAY)},\n"
+        f"  exportUrl: {json.dumps(RELAY.replace('/api/donate', '/api/export'))},\n"
+        f"  voidUrl: {json.dumps(RELAY.replace('/api/donate', '/api/void'))},\n"
         f"  deviceToken: {json.dumps(device_token)},\n"
-        f'  location: "{LOCATION}",\n'
+        f"  location: {json.dumps(LOCATION)},\n"
         "  maxPixels: 1600,\n"
         "};"
     )
@@ -82,11 +82,15 @@ def main() -> None:
     # Fail loudly rather than hand over a file that would not work on site.
     check = TARGET.read_text()
     problems = []
-    if f'base: "{base}"' not in check:
+    if f"base: {json.dumps(base)}" not in check:
         problems.append("camera address not baked in")
     if 'pass: ""' in check:
         problems.append("password placeholder still empty")
-    if RELAY not in check:
+    # The literal must read back as the exact password, or digest auth fails on the dock.
+    baked = re.search(r"^  pass: (.*),$", check, re.M)
+    if not baked or json.loads(baked.group(1)) != password:
+        problems.append("password did not survive quoting")
+    if f"relay: {json.dumps(RELAY)}" not in check:
         problems.append("relay URL missing")
     if "buildDigestAuth" not in check:
         problems.append("digest auth code missing")
@@ -108,8 +112,8 @@ def main() -> None:
     print(f"  camera : {base}  user={user}  pass={'*' * len(password)}")
     print(f"  relay  : {RELAY}")
     print(f"  token  : {'set' if device_token else 'NOT SET (works only while the relay is open)'}")
-    print("\nAirDrop this file to the iPad, open it in Scriptable, rename to 'Aperture'.")
-    print("It never prompts for settings — the on-site steps are import, Self-test, done.")
+    print("\nAirDrop this file to the iPad, open it in Scriptable, rename it to 'Aperture'.")
+    print("Then run System check from its menu (camera-access/ipad/ONSITE-CARD.md).")
 
 
 if __name__ == "__main__":
