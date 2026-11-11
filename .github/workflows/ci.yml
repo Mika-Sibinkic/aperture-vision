@@ -20,6 +20,7 @@ jobs:
       - name: n8n workflow JSON parses and carries no pinData (captured requests)
         run: python -c "import glob, json; bad = [f for f in glob.glob('n8n/*.json') if json.load(open(f)).get('pinData')]; assert not bad, bad"
       - run: node scripts/test_farmbrite_match.js
+      - run: node scripts/test_parse_vision.js
 
   web:
     runs-on: ubuntu-latest
