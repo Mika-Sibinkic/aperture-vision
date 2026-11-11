@@ -11,8 +11,6 @@
 #   cp deploy/.env.example deploy/.env       # fill in the slots marked ⇨
 #   docker compose -f deploy/docker-compose.yml up -d aperture-bridge
 #   docker compose -f deploy/docker-compose.yml run --rm aperture-demo
-version: "3.9"
-
 services:
   aperture-bridge:
     build:

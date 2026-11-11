@@ -1,7 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-pyezviz==0.2.2.5
-requests==2.32.3
+# Flag: bridge.py calls EzvizCamera.load()/fetch_pic_url(); no pyezviz release has them (checked 0.1.9.9-0.2.2.3). Hik-Connect path is unverified.
+pyezviz==0.2.2.3
+requests==2.34.2
 # Deterministic ground-truth OCR of the dock platform scale
 opencv-python-headless==4.10.0.84
 pytesseract==0.3.13
