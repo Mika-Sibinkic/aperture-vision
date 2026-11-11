@@ -12,7 +12,7 @@ prompt edits vs. model edits.
 
 v0.8 told the model to compute pixels_per_inch from 6" squares. The board printed for
 Cul2vate has 4" squares (8x10 grid, a 32x40" pattern on a 36x44" sign; see
-`demo/README.md`). The 6" figure came from the Branch prototype's board generator. A
+`docs/BOM.md`). The 6" figure came from the Branch prototype's board generator. A
 model that trusted it would read every load 1.5x too large in each dimension. The only
 change is that sentence. Not yet checked against NIM or deployed: run
 `python3 scripts/vision-regression-test.py` first.
@@ -22,7 +22,7 @@ change is that sentence. Not yet checked against NIM or deployed: run
 v0.3 embedded a **filled-in example JSON** in the schema block (`"weight_lbs": 48.4`,
 `"confidence": 0.82`, `"pixels_per_inch": 2.3`, `"estimated_volume_cu_in": 1728`).
 
-Measured against the real empty-zone control frame (`demo/test-images/IMG_0739.JPG`,
+Measured against the real empty-zone control frame (`test-images/IMG_0739.JPG`,
 ground truth = 0.0 lb), `meta/llama-3.2-90b-vision-instruct` returned **those exact
 example numbers back** and labelled a bare dock `"cased water bottles"` at 48.4 lbs.
 [VERIFIED 2026-07-22] It was copying the example, not measuring the scene, and it
@@ -39,15 +39,18 @@ looked completely confident doing it.
 
 **Validation (both directions, real images):**
 
-| Control | Image | Expected | v0.4 result |
+| Control | Image | Expected | v0.4 result (llama-3.2-90b, 2026-07-22) |
 |---|---|---|---|
 | Negative | `IMG_0739.JPG` (real dock, empty zone, truth 0.0 lb) | empty / 0 lb | `item_type:"empty"`, `weight_lbs:0`, conf 0.9 |
 | Positive | real fruit/veg market stall photo (Wikimedia, CC) | goods + a computed weight | `item_type:"fruit"`, `milk-crate-standard`, 10 lb (8-12), conf 0.8 |
 
 Re-run both any time: `python3 scripts/vision-regression-test.py`.
 
-Model: `nvidia/nemotron-nano-12b-v2-vl` on NVIDIA NIM (see the model note below).
-`llama-3.2-11b-vision` was rejected; it returns narrative prose instead of JSON.
+Production model since 2026-08-01 (prompt v0.5): `nvidia/nemotron-nano-12b-v2-vl` on
+NVIDIA NIM. It replaced `meta/llama-3.2-90b-vision-instruct` because the 90b's slow
+runs went past the 15 s a tap is allowed (commit `04dddad`). The v0.4 results above
+predate the switch. The v0.6-v0.8 results below were recorded after it, on 2026-08-02.
+`llama-3.2-11b-vision` was rejected earlier; it returns narrative prose instead of JSON.
 
 ## v0.5: count containers instead of guessing at a pile
 
@@ -58,7 +61,7 @@ markedly better at, and it converts volume into arithmetic:
     volume = container_count x container_volume x fill_fraction
 
 No file in this repo holds container dimensions: the model supplies one container's
-volume itself. The container names live in the schema below and in the n8n parse node.
+volume itself. The container names live in the schema below.
 
 ## v0.8: ground the model in the real scene (2026-08-02)
 
@@ -82,7 +85,7 @@ Two further changes:
 
 The first live capture from the mounted camera produced **"banana box, 50 lbs, 70%
 full"** on a **completely empty staging zone**. [VERIFIED; frame saved as
-`demo/test-images/dock-empty-night-IR.jpg`]
+`test-images/dock-empty-night-IR.jpg`]
 
 What the frame actually contained: bare concrete inside the tape; a box of onions, a
 bucket, chairs and a cart around the edges; two empty crates at the zone's border; the
@@ -263,10 +266,5 @@ eval_mode: false
 Return the JSON object now.
 ```
 
-The captured JPEG is attached as the vision input. That's the whole call.
-
-## Hidden-weight eval mode
-
-If the context contains `eval_mode: true`, the model must not reference any known
-weight that may leak via metadata; the training loop strips weight metadata and
-holds ground truth back for a pure prediction.
+The captured JPEG is attached as the vision input. That's the whole call. Every
+caller sends `eval_mode: false`; the training loop that sent `true` is in git history.

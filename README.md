@@ -7,6 +7,8 @@ food bank.
 
 **Who this is for:** people who run a donation or receiving dock and want a weight
 logged for every load without stopping at a scale, and who can live with an estimate.
+The weights have not been checked against a scale yet, so nobody knows how far off
+they are.
 
 A volunteer stacks a donation inside the taped zone on the dock and taps one button on
 an old iPad. The iPad pulls a frame from the mounted camera. A vision model names what
@@ -17,10 +19,11 @@ screen.
 
 ## Try it in a minute
 
-The first two lines need nothing installed but Node. They run the workflow's own
-weight node and Farmbrite matcher, the code that decides what gets logged, against
-synthetic model replies. The third line builds the relay and runs its tests. No line
-needs an API key or makes a paid call.
+The first two lines need nothing installed but Node. They run two nodes from the
+committed workflow file against synthetic model replies: the weight node, which
+decides what gets logged, and the Farmbrite matcher. Both carry fixes that are not
+deployed yet (see Limits). The third line builds the relay and runs its tests. No
+line needs an API key or makes a paid call.
 
 ```bash
 node scripts/test_parse_vision.js
@@ -34,6 +37,7 @@ The first line prints what each model reply turns into:
 model reply: empty zone, 0 lb               -> logged weight_lbs 0
 model reply: 12.5 lb wrapped in ```json     -> logged weight_lbs 12.5
 model reply: 2500 lb                        -> logged weight_lbs 2500  flagged implausible_weight
+model reply: crate, notes mention a pallet  -> logged container_type crate
 model reply: -5 lb                          -> logged weight_lbs 0
 model reply: prose, not JSON                -> throws "Vision returned non-JSON", nothing logged
 all parse-vision cases pass
@@ -43,30 +47,7 @@ I timed it from a fresh clone on my Mac (Node 22): 0.09 s and 0.06 s for the two
 checks, 27 s for the npm line with a warm npm cache. You should see `32 passed`. The
 web tests cover the relay routes: the device token, input checks, duplicate taps,
 retries after a failed n8n call, undo and export. CI runs all three lines on every
-push, plus the board-detector tests below and `scripts/check-ipad-script.sh`.
-
-### Optional: the board detector
-
-```bash
-bash demo/run_demo.sh --provider stub
-demo/.venv/bin/python -m pytest -q demo
-```
-
-This builds `demo/.venv` with OpenCV, looks for the printed ChArUco board in two real
-dock frames, and writes `demo/output/accuracy-report.md`. Production does not run
-this detector. From the same fresh clone, with a warm pip cache, it took 18 s and
-pytest reported `2 passed`. It found the board in one frame:
-
-```
-- ChArUco detected: **1** / 2
-| IMG_0739.JPG | 0.00 | 0.00 |  |  | ❌ |  | too_few_corners | 0.00s |
-| dock-empty-night-IR.jpg | 0.00 | 0.00 |  |  | ✅ | 6.164 | poor | 0.00s |
-```
-
-The stub makes no vision call and always answers 0 lb. Both frames show an empty dock,
-so the weight columns only prove the plumbing works. The miss is `IMG_0739.JPG`, an
-iPhone photo of the camera feed on a monitor: moire leaves 4 of the board's 40 markers
-readable. `demo/README.md` has the details.
+push, plus `scripts/check-ipad-script.sh`.
 
 ### Against the live model
 
@@ -92,16 +73,17 @@ iPad (Scriptable)                          n8n Cloud (aperture-workflow-ipad-nim
 
 - **Capture.** Tested with a Hikvision AcuSense over ISAPI digest. The client is
   `camera-access/ipad/aperture-pull.js`.
-- **Scale reference.** A printed ChArUco board (8×10 grid of 4 in squares) hangs in
-  the camera's view, so the model sees an object of known size in every frame. The
-  prompt tells the model the square size. `demo/charuco_preprocessor.py` measures the
-  board with OpenCV, but only in the offline demo, and it finds the board in 1 of the
-  2 bundled frames.
+- **Scale reference.** A printed ChArUco board (8×10 grid of 4 in squares,
+  `docs/BOM.md`) hangs in the camera's view, so the model sees an object of known
+  size in every frame. The prompt tells the model the square size. No code measures
+  the board; the model reads it from the frame.
 - **Prompt.** `prompts/weight-estimation.md` (v0.9-board) is the file to change if you
   want the model to behave differently. It has the model count containers and name
   goods only inside the taped zone, return a types-only JSON schema, and answer
   "unidentified" or "empty" when that is the truth. Each version records the failure it
-  fixes. `scripts/rewire-n8n-ipad-nim.py` pushes it into the workflow.
+  fixes. `scripts/rewire-n8n-ipad-nim.py` pushes it into the workflow. Its first line
+  and its THE SCENE section describe Cul2vate's dock (a brick wall, a white van, the
+  taped zone at centre-right); a fork rewrites both.
 - **No learned corrections.** The weight node logs the model's number as it comes,
   clamped at 0 and flagged over 2000 lb. An earlier offline training loop scored a
   different model on product photos, so its corrections would not have fit
@@ -114,26 +96,45 @@ the iPad pulls the frame itself. That needs no on-site server and no new hardwar
 ([decision](docs/decisions/2026-07-22-ipad-lan-bridge.md)). Vision runs on NVIDIA NIM
 behind an n8n credential, so there is nothing of mine to keep alive. The trade is that
 the free credits run out one day
-([decision](docs/decisions/2026-07-28-no-always-on-server.md)). There is no scale on
-the dock because the scale was the bottleneck: someone had to weigh and write down
-every load. The price is that every weight is an estimate.
+([decision](docs/decisions/2026-07-28-no-always-on-server.md)). The model is
+`nvidia/nemotron-nano-12b-v2-vl`. It replaced `llama-3.2-90b-vision-instruct` on
+2026-08-01 because the bigger model's slow runs went past the 15 s a tap is allowed.
+There is no scale on the dock because the scale was the bottleneck: someone had to
+weigh and write down every load. The price is that every weight is an estimate.
 
 ## Deploy your own
 
+Change these for your site:
+
+- **The scene.** The first line and the THE SCENE section of the SYSTEM PROMPT in
+  `prompts/weight-estimation.md`. Then run `scripts/vision-regression-test.py`. Its
+  negative control, `test-images/dock-empty-night-IR.jpg`, is Cul2vate's empty dock;
+  put an empty frame from your camera there under the same name.
+- **`RELAY` and `LOCATION`** at the top of `scripts/make-ipad-script.py`. The
+  regression test reads both from there. The `CONFIG` block in
+  `camera-access/ipad/aperture-pull.js` holds the same two as defaults for a build
+  set up by hand on the iPad.
+- **`PRODUCT_MAP` and `NIM_MODEL`** in `scripts/rewire-n8n-ipad-nim.py`. Edit them
+  there, not in the n8n node: the next rewire overwrites the node.
+- **The Sheet ID** in the **Append to Google Sheet** node.
+
 1. **n8n.** Import `n8n/aperture-workflow-ipad-nim.json` and follow `n8n/README.md`.
+   To push prompt or mapping changes with `scripts/rewire-n8n-ipad-nim.py`, export
+   `N8N_BASE_URL`, `N8N_API_KEY` and `N8N_WORKFLOW_ID`. The script takes the NIM and
+   Farmbrite credential ids from the nodes they are attached to;
+   `N8N_NIM_CREDENTIAL_ID` and `N8N_FARMBRITE_CREDENTIAL_ID` override them.
 2. **NVIDIA NIM key.** Store it as the `NVIDIA NIM (Aperture)` credential in n8n.
 3. **Google Sheet** with a `Donations` tab, connected through n8n's Google Sheets
    credential. Import `data/donations-sheet-template.csv` as that tab: its header is
    the columns the workflow writes.
 4. **Farmbrite.** The workflow posts a Farmbrite draft order for every tap with a
    positive weight. No n8n variable turns that off. To skip Farmbrite, disable the
-   **Farmbrite: log order** node. To use it, first replace the product map in **Build
-   Farmbrite order**: it holds Cul2vate's product IDs. `n8n/README.md` step 4.
+   **Farmbrite: log order** node. To use it, replace `PRODUCT_MAP` with your own
+   products and run the rewire script. `n8n/README.md` step 4.
 5. **Vercel + Blob.** Deploy this repo to Vercel, create a private Blob store, and set
    the variables in the table below.
-6. **iPad build.** Set `RELAY` at the top of `scripts/make-ipad-script.py` to your
-   Vercel URL. `scripts/vision-regression-test.py` reads it from there too. Put the
-   camera's address and login in a gitignored `SECRETS.local.md` as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
+6. **iPad build.** Set `RELAY` in `scripts/make-ipad-script.py` to your Vercel URL.
+   Put the camera's address and login in a gitignored `SECRETS.local.md` as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
    Export `APERTURE_DEVICE_TOKEN` (the same value as in Vercel), run
    `python3 scripts/make-ipad-script.py`, then follow
    `camera-access/ipad/ONSITE-CARD.md`.
@@ -155,21 +156,27 @@ Day-to-day operations: `docs/OPERATIONS.md`.
 | `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo. Unset, undo skips Farmbrite, and fails for a tap that recorded an order id |
 
 Files that are local on purpose are not in the repo:
-`SECRETS.local.md`, the generated `*.local.js` iPad build, Farmbrite CSV exports, and
-the demo's generated `demo/output/`.
+`SECRETS.local.md`, the generated `*.local.js` iPad build and Farmbrite CSV exports.
 
-## Limits and security
+## Limits
 
-The weights have not been checked against a scale on this camera. Treat the logged
-pounds as an operational record and a trend, not audited poundage. The model's
-self-reported confidence did not separate good readings from bad ones, so no operator
-screen shows it. The relay checks a device token, but the check stays open until
-`APERTURE_DEVICE_TOKEN` is set, so treat the relay URL as a secret until then. The
-generated iPad build holds the camera password. The live workflow still runs prompt
-v0.8-scene, which tells the model the board's squares are 6 in; they are 4 in. The fix
-(v0.9-board) is committed but not yet checked against NIM or deployed. Nothing feeds
-scale weights back, so there is no ground truth. What is secret and how to report a
-problem: [SECURITY.md](SECURITY.md).
+- The weights have not been checked against a scale on this camera. Treat the logged
+  pounds as an operational record and a trend, not audited poundage. Nothing feeds
+  scale weights back, so there is no ground truth.
+- Across the first 10 live records the model's confidence took only two values, 0.85
+  and 0.95. With no scale weights there is no way to check it, so no operator screen
+  shows it.
+- The committed workflow has three changes that are not deployed yet. Prompt
+  v0.9-board gives the board's real 4 in squares; live still says 6 in. The Farmbrite
+  matcher fix is what `test_farmbrite_match.js` checks. The weight node rewrite logs
+  the model's `container_type` as it came. v0.9 has not been run against NIM.
+
+## Security
+
+- The relay checks a device token, but the check stays open until
+  `APERTURE_DEVICE_TOKEN` is set. Treat the relay URL as a secret until then.
+- The generated iPad build holds the camera password.
+- What is secret and how to report a problem: [SECURITY.md](SECURITY.md).
 
 ## Status
 

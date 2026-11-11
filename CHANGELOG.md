@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com). Entries before 2026-06-1
 ## [Unreleased]
 
 ## [1.0.0] - 2026-11-11
-First public release. The system has run at Cul2vate since the first live taps on 2026-08-02. This release closes the gaps in the relay that a public URL would expose.
+First public release. First live taps at Cul2vate were on 2026-08-02, and it was last verified live that day. This release closes the gaps in the relay that a public URL would expose.
 
 ### Security
 - Every `/api/*` route checks the `x-aperture-token` header against `APERTURE_DEVICE_TOKEN` with a constant-time compare and returns 401 on a miss. The check stays open while the variable is unset, so the live iPad keeps working until the token is rolled out. The iPad build and `scripts/vision-regression-test.py` send the header.
@@ -15,17 +15,23 @@ First public release. The system has run at Cul2vate since the first live taps o
 - `/api/donate` no longer logs an n8n reply that carries an `error` (n8n answers 200 when it refuses the shared token). It returns 502, deletes the archived photo and writes no record.
 - iPad: a build set up through the Keychain derives the export and undo URLs from the relay URL instead of placeholders, and the system check shows a failed undo as its own step.
 - Prompt v0.9-board: the board has 4 in squares, not the 6 in that v0.8 stated. Committed only, not yet run against NIM or deployed.
+- Farmbrite matcher: a generic word no longer lands on one variety ('potatoes' used to become Adirondack Blue Potatoes). A word matches a product it is part of only when exactly one product contains it, so 'carrot' still finds Carrots. Bucket products are never fuzzy-matched. November-May loads with no Seasonal bucket skip with a reason, and the response returns `farmbrite_skipped_reason`. Committed only, not deployed.
+- The weight node is written whole by `scripts/rewire-n8n-ipad-nim.py` instead of patched. Its keyword resolver was rewriting the model's `container_type` from words in the notes. The Sheet columns keep their old constant values. Committed only, not deployed.
+- `scripts/make-ipad-script.py` quotes every value it bakes in, so a backslash or quote in the camera password survives the build.
+- iPad undo says the Sheet row stays. It used to say the donation was gone from the record.
 - `/api/donate` keeps a client `donation_id` only when it is a UUID, coerces `description` to a string, and takes the blob date from a parsed timestamp. A numeric `description` used to return an empty-body 500.
 - Duplicate donations: a retried tap whose first attempt is still running gets a 409 and never reaches n8n a second time. When n8n fails or returns nothing, the archived photo is deleted so the retry goes through.
 - Undo marks a record voided only after the Farmbrite draft is deleted or none exists. A failed delete returns 502, keeps `farmbrite_void_error`, and the next undo retries it. The fallback lookup lists drafts and matches `ref <id>` exactly. `/api/void` rejects ids that are not UUIDs.
 - CSV export returns 500 when any record fails to read, instead of a 200 with rows missing.
 
 ### Removed
-- The legacy PWA (it posted no image and sent no device token), `/api/correct` (no caller, no workflow), `training-loop/` (nothing read its output, and its evaluator scored a different model from production), `public/bias-table.json`, `public/learned-state/`, `data/avg-weights.json` and `data/containers.json`. All are in git history.
+- The legacy PWA (it posted no image and sent no device token), `/api/correct` (no caller, no workflow), `training-loop/` (nothing read its output, and its evaluator scored a different model from production), `public/bias-table.json`, `public/learned-state/`, `data/avg-weights.json`, `data/containers.json`, the offline ChArUco demo in `demo/` (production never ran it, and it had no weighed frames to score) and `scripts/farmbrite-setup.py` (it printed only the first 15 products and created an inventory type nothing uses). All are in git history.
 
 ### Changed
 - `.env.example` lists exactly the five variables the app reads.
-- `scripts/vision-regression-test.py` reads `RELAY` from `scripts/make-ipad-script.py`, so a fork sets its URL in one place.
+- `scripts/vision-regression-test.py` reads `RELAY` and `LOCATION` from `scripts/make-ipad-script.py`, so a fork sets each in one place.
+- `scripts/rewire-n8n-ipad-nim.py` reads `N8N_WORKFLOW_ID` from the environment and takes credential ids from the nodes they are attached to.
+- The test frames moved from `demo/test-images/` to `test-images/`, and the board parameters to `docs/BOM.md`.
 - `data/donations-sheet-template.csv` has the columns the workflow writes.
 - Removed the `lint` script. Next 16 dropped `next lint` and the repo has no ESLint config.
 - Added vitest tests for the relay routes (`npm test`).

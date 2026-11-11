@@ -1,20 +1,25 @@
 # n8n workflow
 
 Import `aperture-workflow-ipad-nim.json`. It has 18 nodes: the 17-node live workflow
-plus two changes from 2026-11-11 that are not deployed yet:
+plus three changes from 2026-11-11 that are not deployed yet:
 
 - A Farmbrite fix. It adds **Farmbrite: has order?**, stops generic words like
-  "potatoes" from matching a specific variety, skips November-May loads that have no
-  Seasonal bucket, and returns `farmbrite_skipped_reason`.
+  "potatoes" from matching a specific variety (a word still matches when exactly one
+  product contains it, so "carrot" finds Carrots), skips November-May loads that have
+  no Seasonal bucket, and returns `farmbrite_skipped_reason`.
 - Prompt v0.9-board, which gives the board's real 4 in square size. Live still runs
   v0.8-scene, which says 6 in.
+- The weight node (**Parse vision + tare + bias**, name kept so references hold) is
+  written whole by the rewire script. It logs the model's `container_type` as it came;
+  live still rewrites it from keywords in the notes.
 
-Until they are pushed, the live workflow has neither.
+Until they are pushed, the live workflow has none of them.
 
 `scripts/rewire-n8n-ipad-nim.py` generates the file. It reads the live workflow over
 the n8n API, rewires it for the iPad and NVIDIA NIM, checks it, writes the redacted
 copy here (name, nodes, connections and settings only), then PUTs it back
-(`--dry-run` stops before the PUT, `--restore <backup>` rolls back).
+(`--dry-run` stops before the PUT, `--restore <backup>` rolls back). It needs
+`N8N_BASE_URL`, `N8N_API_KEY` and `N8N_WORKFLOW_ID` in the environment.
 
 The bridge-era workflows are in git history: `git log --all -- n8n/`. Every one of them
 fetched the frame through a camera bridge that no longer runs.
@@ -35,9 +40,11 @@ Use native n8n nodes and n8n credentials. Keys never go in the workflow JSON.
    - `Farmbrite (Aperture)`: Header Auth, on **Farmbrite: log order**.
 4. Farmbrite runs on every tap with a positive weight. No n8n variable turns it off:
    **Guard: Farmbrite configured** is disabled and nothing connects to it. To skip
-   Farmbrite, disable **Farmbrite: log order**. To use it, replace the `PRODUCTS` map in
-   **Build Farmbrite order** first. It holds Cul2vate's product IDs, and it comes from
-   `PRODUCT_MAP` in the rewire script.
+   Farmbrite, disable **Farmbrite: log order**. To use it, replace `PRODUCT_MAP` in
+   `scripts/rewire-n8n-ipad-nim.py` with your products, then run the script. Edit it
+   there, not in **Build Farmbrite order**: the next rewire overwrites the node.
+   Farmbrite lists products at `GET https://api.farmbrite.com/v1/products` with the
+   Bearer token (`docs/OPERATIONS.md` §8).
 5. Paste the prompt. **Build vision request** holds the system prompt as a string.
    Its source is `prompts/weight-estimation.md`, between `## SYSTEM PROMPT` and
    `## END SYSTEM PROMPT`. The rewire script does this for you.

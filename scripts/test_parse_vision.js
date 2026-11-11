@@ -8,7 +8,7 @@ const path = require('node:path');
 const wf = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'n8n', 'aperture-workflow-ipad-nim.json'), 'utf8'));
 const code = wf.nodes.find((n) => n.name === 'Parse vision + tare + bias').parameters.jsCode;
 
-function parse(label, content) {
+function parse(label, content, show = (o) => `weight_lbs ${o.weight_lbs}`) {
   const upstream = {
     'Webhook: donation button': { body: { donation_id: 'abcdef12-0000-4000-8000-000000000000', description: '' } },
     'Load prompt + config': { prompt_version: 'v0.9-board', model: 'nvidia/nemotron-nano-12b-v2-vl' },
@@ -18,7 +18,7 @@ function parse(label, content) {
   const $json = { choices: [{ message: { content } }] };
   const out = new Function('$', '$json', code)($, $json)[0].json;
   const flag = out.implausible_weight ? '  flagged implausible_weight' : '';
-  console.log(`model reply: ${label.padEnd(30)} -> logged weight_lbs ${out.weight_lbs}${flag}`);
+  console.log(`model reply: ${label.padEnd(30)} -> logged ${show(out)}${flag}`);
   return out;
 }
 
@@ -42,7 +42,8 @@ assert.ok(huge.confidence <= 0.3, `confidence ${huge.confidence}`);
 assert.ok(huge.known_failure_flags.includes('implausible_weight_review'));
 
 // The model's container_type is logged as it came, even when the notes name another container.
-const crate = parse('crate, notes mention a pallet', reading({ weight_lbs: 40, container_type: 'crate', notes: 'next to a wooden pallet outside the tape' }));
+const crate = parse('crate, notes mention a pallet', reading({ weight_lbs: 40, container_type: 'crate', notes: 'next to a wooden pallet outside the tape' }),
+  (o) => `container_type ${o.container_type}`);
 assert.strictEqual(crate.container_type, 'crate');
 
 // A negative weight is logged as 0.
