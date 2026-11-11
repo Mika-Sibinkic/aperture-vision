@@ -34,6 +34,7 @@ const CONFIG = {
   relay: "https://<vercel-app-host>/api/donate",
   exportUrl: "https://<vercel-app-host>/api/export",
   voidUrl: "https://<vercel-app-host>/api/void",
+  deviceToken: "", // sent as x-aperture-token; the relay rejects calls without it once APERTURE_DEVICE_TOKEN is set
   location: "Cul2vate, Ellington Ag Center",
   maxPixels: 1600, // longest edge sent upstream; keeps the tap fast on site WiFi
 };
@@ -116,6 +117,7 @@ if (typeof module !== "undefined" && module.exports) {
 const KEYS = {
   base: "aperture_cam_base", user: "aperture_cam_user", pass: "aperture_cam_pass",
   path: "aperture_snapshot_path", relay: "aperture_relay_url", location: "aperture_location",
+  deviceToken: "aperture_device_token",
 };
 
 function headerLookup(headers, name) {
@@ -194,6 +196,7 @@ async function resolveConfig(mode) {
     maxPixels: CONFIG.maxPixels,
     exportUrl: CONFIG.exportUrl,
     voidUrl: CONFIG.voidUrl,
+    deviceToken: Keychain.contains(KEYS.deviceToken) ? Keychain.get(KEYS.deviceToken) : CONFIG.deviceToken,
   };
 }
 
@@ -205,6 +208,7 @@ async function runSetup() {
     ["Snapshot path", KEYS.path, CONFIG.path, false],
     ["Relay URL", KEYS.relay, CONFIG.relay, false],
     ["Location label", KEYS.location, CONFIG.location, false],
+    ["Device token", KEYS.deviceToken, "", true],
   ];
   for (const [label, key, fallback, secure] of fields) {
     const a = new Alert();
@@ -291,11 +295,16 @@ function shrink(data, maxPixels) {
   }
 }
 
+// Every relay call carries the device token. One place, so no call can forget it.
+function relayHeaders(cfg) {
+  return { "Content-Type": "application/json", "x-aperture-token": cfg.deviceToken || "" };
+}
+
 async function postToRelay(cfg, b64, description, donationId) {
   const post = new Request(cfg.relay);
   post.method = "POST";
   post.timeoutInterval = 120;
-  post.headers = { "Content-Type": "application/json" };
+  post.headers = relayHeaders(cfg);
   post.body = JSON.stringify({
     description: description || "",
     image_b64: b64,
@@ -480,6 +489,7 @@ async function runDonation(cfg) {
 async function showHistory(cfg) {
   const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
   req.timeoutInterval = 60;
+  req.headers = relayHeaders(cfg);
   let rows = [];
   try {
     const data = await req.loadJSON();
@@ -517,7 +527,7 @@ async function showHistory(cfg) {
         const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
         v.method = "POST";
         v.timeoutInterval = 60;
-        v.headers = { "Content-Type": "application/json" };
+        v.headers = relayHeaders(cfg);
         v.body = JSON.stringify({ donation_id: r.donation_id, reason: "undone on the iPad" });
         try {
           const res = await v.loadJSON();
@@ -676,6 +686,7 @@ async function runApp(cfg) {
     try {
       const req = new Request((cfg.exportUrl || CONFIG.exportUrl) + "?format=json");
       req.timeoutInterval = 30;
+      req.headers = relayHeaders(cfg);
       const data = await req.loadJSON();
       const rows = (Array.isArray(data.rows) ? data.rows : []).slice(-8).reverse().map((r) => ({
         donation_id: r.donation_id,
@@ -719,7 +730,7 @@ async function runApp(cfg) {
         const v = new Request(cfg.voidUrl || CONFIG.voidUrl);
         v.method = "POST";
         v.timeoutInterval = 90;
-        v.headers = { "Content-Type": "application/json" };
+        v.headers = relayHeaders(cfg);
         v.body = JSON.stringify({ donation_id: action.id, reason: "undone on the iPad" });
         const res = await v.loadJSON();
         await call(res && res.ok

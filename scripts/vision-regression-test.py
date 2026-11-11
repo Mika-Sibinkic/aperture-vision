@@ -21,12 +21,14 @@ confident, wrong weights.
 Usage:
     python3 scripts/vision-regression-test.py            # test NIM directly
     python3 scripts/vision-regression-test.py --e2e      # test the live relay
+                                                         # (sends APERTURE_DEVICE_TOKEN from env)
 """
 from __future__ import annotations
 
 import argparse
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
@@ -121,7 +123,9 @@ def ask_relay(image: bytes, label: str) -> dict:
     body = json.dumps({"description": desc, "image_b64": base64.b64encode(image).decode(),
                        "triggered_at": "2026-01-01T00:00:00Z", "location": "Cul2vate, Ellington Ag Center",
                        "source": "aperture-regression"}).encode()
-    req = urllib.request.Request(RELAY_URL, data=body, headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json",
+               "x-aperture-token": os.environ.get("APERTURE_DEVICE_TOKEN", "")}
+    req = urllib.request.Request(RELAY_URL, data=body, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
             return json.load(resp)

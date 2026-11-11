@@ -8,11 +8,14 @@
 // Response: { ok: true, sheet_row_updated: true } | { error, status }
 
 import { NextRequest, NextResponse } from "next/server";
+import { deviceAuth } from "../../lib/deviceAuth";
 
 const N8N_CORRECTION_URL = process.env.N8N_CORRECTION_URL;       // different path from /donate
 const APERTURE_SHARED_TOKEN = process.env.APERTURE_SHARED_TOKEN;
 
 export async function POST(req: NextRequest) {
+  const denied = deviceAuth(req);
+  if (denied) return denied;
   if (!N8N_CORRECTION_URL || !APERTURE_SHARED_TOKEN) {
     return NextResponse.json(
       { error: "server not configured. N8N_CORRECTION_URL or APERTURE_SHARED_TOKEN missing." },

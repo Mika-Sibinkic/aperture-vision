@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { list } from "@vercel/blob";
+import { deviceAuth } from "../../lib/deviceAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,8 @@ function csvCell(value: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
+  const denied = deviceAuth(req);
+  if (denied) return denied;
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json({ error: "storage not configured" }, { status: 500 });
   }

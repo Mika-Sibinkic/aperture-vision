@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { list, put } from "@vercel/blob";
+import { deviceAuth } from "../../lib/deviceAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +78,8 @@ async function deleteFarmbriteOrder(orderId: string): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = deviceAuth(req);
+  if (denied) return denied;
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json({ error: "storage not configured" }, { status: 500 });
   }

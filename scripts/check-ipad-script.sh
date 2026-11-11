@@ -17,7 +17,7 @@ echo "syntax ......... ok"
 
 for f in runApp apertureHTML chooseMode runDonation showHistory selfTest finishAlert progressTable \
          grabFrame postToRelay withTimeout showResult showError resolveConfig \
-         runSetup shrink withRetry readState writeState statePath headerLookup \
+         runSetup shrink withRetry readState writeState statePath headerLookup relayHeaders \
          md5 parseAuthHeader buildDigestAuth main; do
   grep -q "function $f(" "$ABS" || { echo "MISSING FUNCTION: $f"; exit 1; }
 done

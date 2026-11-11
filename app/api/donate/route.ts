@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
+import { deviceAuth } from "../../lib/deviceAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +89,8 @@ async function writeRecord(record: Record<string, unknown>, donationId: string, 
 }
 
 export async function POST(req: NextRequest) {
+  const denied = deviceAuth(req);
+  if (denied) return denied;
   const webhook = process.env.N8N_WEBHOOK_URL;
   const token = process.env.APERTURE_SHARED_TOKEN;
 
