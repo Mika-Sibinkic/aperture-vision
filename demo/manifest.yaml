@@ -1,6 +1,8 @@
 # Aperture demo test set.
 #
 # Each image entry is a single (image, ground-truth-weight-in-lb) pair.
+# `description` is what a volunteer would type, and the nim provider sends it to
+# the model. Keep notes about the frame in comments so they never reach the model.
 # The harness loads each image, runs the deterministic ChArUco preprocessor,
 # calls the vision provider, and computes residual vs. `true_weight_lbs`.
 #
@@ -23,20 +25,20 @@ board:
   # Pattern: 8×10 grid of 4" squares (32×40" pattern, 2" white border).
 
 images:
-  # ── Cul2vate live camera frames ────────────────────────────────────────────
+  # ── Cul2vate dock frames ───────────────────────────────────────────────────
+  # An iPhone photo of the camera feed on a monitor (EXIF: iPhone, 2026-04-16).
+  # Moire leaves 4 of the board's 40 markers readable. Empty staging zone; the
+  # boxes and bucket in the foreground are outside it.
   - filename: IMG_0739.JPG
-    description: |
-      Hikvision RTSP feed at Cul2vate dock. Empty staging zone (yellow tape).
-      ChArUco board on brick wall. Items in foreground (boxes/bucket) are
-      OUTSIDE the staging zone — should report inside_zone=false, weight=null.
+    description: ""
     true_weight_lbs: 0.0   # baseline empty-zone control
     is_control: true
 
+  # A frame from the mounted camera at night (IR, 2026-08-01). Empty staging zone;
+  # crates, a bucket and a produce box sit outside it. The old prompt read it as
+  # "banana box, 50 lbs".
   - filename: dock-empty-night-IR.jpg
-    description: |
-      Mounted camera frame at night (IR, 2026-08-01). Empty staging zone.
-      Crates, a bucket and a produce box sit OUTSIDE the zone. The frame the
-      old prompt read as "banana box, 50 lbs".
+    description: ""
     true_weight_lbs: 0.0
     is_control: true
 

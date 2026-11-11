@@ -2,8 +2,9 @@
 Aperture demo harness — end-to-end accuracy run on a fixture set.
 
 Pipeline per image:
-  1. Deterministic OpenCV ChArUco preprocessor → pixels_per_inch + board bbox
-  2. Vision provider (OpenAI gpt-4o or stub) → predicted weight + confidence
+  1. OpenCV ChArUco preprocessor → pixels_per_inch + board bbox (demo only;
+     production does not run it)
+  2. Vision provider (NIM with the production prompt, or stub) → predicted weight
   3. Compare to manifest's true_weight_lbs → log residual
 
 Output:
@@ -11,8 +12,8 @@ Output:
   output/accuracy-report.md — human-readable summary
 
 Usage:
-  # full real run (needs OPENAI_API_KEY)
-  python -m demo.harness --provider openai --manifest demo/manifest.yaml
+  # real run against NVIDIA NIM (needs the NIM key in SECRETS.local.md)
+  python -m demo.harness --provider nim --manifest demo/manifest.yaml
 
   # plumbing test without an API key
   python -m demo.harness --provider stub --manifest demo/manifest.yaml
@@ -55,7 +56,6 @@ def evaluate_one(
     true_weight_lbs: float | None,
     description: str,
     provider: str,
-    model: str,
     board_squares_x: int,
     board_squares_y: int,
     board_square_in: float,
@@ -74,15 +74,7 @@ def evaluate_one(
 
     # 2. Vision call.
     try:
-        pred = vision_provider.call_vision(
-            str(image_path),
-            pixels_per_inch=cha.pixels_per_inch,
-            board_bbox=cha.board_pixel_bbox,
-            description=description,
-            provider=provider,
-            model=model,
-            true_weight_lbs=true_weight_lbs,
-        )
+        pred = vision_provider.call_vision(str(image_path), description=description, provider=provider)
         vision_error = None
     except Exception as e:
         pred = None
@@ -181,15 +173,14 @@ def write_report(records: list[dict], out_md: Path, provider: str, model: str) -
         )
 
     lines += ["", "## Method", "",
-              "1. Deterministic OpenCV ChArUco preprocessor returns sub-pixel-accurate `pixels_per_inch` + board bbox.",
-              "2. Vision call receives the calibration value as input (so the model never has to estimate it).",
+              "1. OpenCV ChArUco preprocessor returns `pixels_per_inch` + board bbox. Production does not run it.",
+              "2. Vision call: the production prompt and model on NIM, or the stub. Neither receives the preprocessor's numbers.",
               "3. Residual = |true - predicted| / true. No bias correction, no learned density — raw v1 numbers.",
               "",
               "## Honesty notes",
               "",
               "- This is the static-mode pipeline (no in-motion capture).",
               "- Stub-provider rows in the table do NOT contribute to the accuracy distribution. Tagged in residuals.jsonl as `provider=stub`.",
-              "- ChArUco quality affects accuracy directly. 'Marginal' or 'poor' quality means the pixels-per-inch number itself is unreliable, so weight error compounds.",
               ""]
     out_md.write_text("\n".join([line for line in lines if line is not None]))
 
@@ -197,8 +188,7 @@ def write_report(records: list[dict], out_md: Path, provider: str, model: str) -
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
-    ap.add_argument("--provider", default="openai", choices=["openai", "stub"])
-    ap.add_argument("--model", default="gpt-4o")
+    ap.add_argument("--provider", default="stub", choices=["nim", "stub"])
     ap.add_argument("--output-dir", default=str(DEFAULT_OUT))
     ap.add_argument("--limit", type=int, default=None,
                     help="run only N images (smoke test)")
@@ -232,7 +222,6 @@ def main() -> None:
                 true_weight_lbs=entry.get("true_weight_lbs"),
                 description=entry.get("description", ""),
                 provider=args.provider,
-                model=args.model,
                 board_squares_x=sx,
                 board_squares_y=sy,
                 board_square_in=sz,
@@ -260,7 +249,7 @@ def main() -> None:
         rr = "" if rec["residual_ratio"] is None else f" {rec['residual_ratio']*100:5.1f}%"
         print(f"  [{marker}] {cha_ok} {rel}{rr}")
 
-    write_report(records, md_path, args.provider, "stub" if args.provider == "stub" else args.model)
+    write_report(records, md_path, args.provider, "stub" if args.provider == "stub" else vision_provider.nim_model())
     print(f"\n  → {md_path}")
     print(f"  → {jsonl_path}")
 

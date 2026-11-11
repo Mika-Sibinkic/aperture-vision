@@ -1,14 +1,15 @@
 # Aperture: offline demo and accuracy harness
 
-This folder runs the deterministic part of the pipeline on two real frames from the
-Cul2vate dock camera. It needs no camera, no n8n and no API key.
+This folder runs a ChArUco board detector on two real frames from the Cul2vate dock: one
+from the mounted camera, one an iPhone photo of its feed on a monitor. The stub run
+needs no camera, no n8n and no API key. Production does not run this detector.
 
 ## What it does
 
 `charuco_preprocessor.py` finds the printed ChArUco board with OpenCV and computes
-pixels-per-inch from its known geometry. `harness.py` passes that number to the vision
-call as an input, so the model never has to guess the scale, then computes the residual
-against the true weight in `manifest.yaml`.
+pixels-per-inch from its known geometry. `harness.py` reports that, makes the vision
+call, then computes the residual against the true weight in `manifest.yaml`. The
+vision call does not receive the board numbers, same as production.
 
 With `--provider stub` there is no vision call. The stub always answers 0 lb, so a stub
 run tests the plumbing and the board detection, nothing else.
@@ -23,10 +24,12 @@ The first run builds `demo/.venv` from `requirements.txt`. The report lands in
 `demo/output/accuracy-report.md` (gitignored).
 
 ```bash
-bash demo/run_demo.sh --provider openai
+bash demo/run_demo.sh --provider nim
 ```
 
-That makes real gpt-4o calls. It needs `OPENAI_API_KEY` and it costs money.
+That sends each frame to NVIDIA NIM with the production prompt
+(`prompts/weight-estimation.md`) and model, through the same `ask_nim` the regression
+test uses. It needs the NIM key in `SECRETS.local.md`.
 
 ## What the board detection gets right and wrong
 
@@ -35,7 +38,7 @@ On the two bundled frames, the preprocessor finds the board in one:
 | Frame | Markers found (of 40) | Result |
 |---|---|---|
 | `dock-empty-night-IR.jpg` | 27 | detected, 6.164 px/in, quality "poor" |
-| `IMG_0739.JPG` | 4 | not detected, too few corners |
+| `IMG_0739.JPG` (iPhone photo of a monitor) | 4 | not detected, moire leaves too few corners |
 
 Measured on 2026-11-11 with the pinned `requirements.txt` (OpenCV 4.13), one run per
 frame. The detector is deterministic, so a rerun gives the same table. The live
@@ -48,12 +51,11 @@ reference the model can see in the frame.
 |---|---|
 | `charuco_preprocessor.py` | OpenCV ChArUco detection, pixels-per-inch and board box |
 | `auto_detect_board.py` | Tries every ArUco dictionary on an image and reports marker counts |
-| `vision_provider.py` | gpt-4o provider and the offline stub |
+| `vision_provider.py` | NIM provider (production prompt and model) and the offline stub |
 | `harness.py` | Image → preprocessor → vision → residual → report |
 | `manifest.yaml` | Test set: image plus true weight in lb |
 | `run_demo.sh` | Builds the venv and runs the harness |
 | `test-images/` | The two dock frames, both empty-zone controls |
-| `KITCHEN-TEST-INSTRUCTIONS.md` | How to shoot weighed items for a real accuracy set |
 
 ## Board parameters
 

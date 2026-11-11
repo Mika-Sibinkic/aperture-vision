@@ -3,7 +3,7 @@
 #
 # Usage:
 #   bash demo/run_demo.sh                       # offline: --provider stub, no key, no cost
-#   bash demo/run_demo.sh --provider openai     # real gpt-4o calls (needs OPENAI_API_KEY, paid)
+#   bash demo/run_demo.sh --provider nim        # production prompt + model on NVIDIA NIM (key in SECRETS.local.md)
 #   bash demo/run_demo.sh --provider stub --limit 1
 #
 # Run from the repo root.

@@ -1,19 +1,12 @@
 """
-Aperture ChArUco preprocessor — DETERMINISTIC.
+Aperture ChArUco preprocessor — deterministic.
 
-Replaces the LLM's pixels-per-inch estimate with a textbook OpenCV pipeline:
-detect ArUco markers, interpolate Charuco corners, derive sub-pixel positions,
-compute pixels-per-inch from known geometry, return everything the downstream
-volume estimator needs.
+Detects the ArUco markers on the printed board, interpolates the ChArUco corners
+and computes pixels-per-inch from the board's known geometry. Same input, same
+output. Only the offline demo runs it; the live workflow does not.
 
-Why deterministic matters: same input → same output, every time. The vision
-LLM was doing this math on vibes (and getting 5–15% wrong). OpenCV gets it
-±1–2% from the same input. This is the single highest-ROI fix on the V2
-agenda, hoisted forward for the EnterpriseCo demo.
-
-Tunable defaults match the Cul2vate deployed board (8×10 grid of 6"
-squares, DICT_4X4_50). Overridable via CLI for the kitchen test set Mika
-prints from `Charuco Board 36x44 300dpi.png`.
+Defaults match the board printed for Cul2vate (DICT_6X6_50, 8×10 grid of 4"
+squares). Override them on the CLI for a different print.
 """
 from __future__ import annotations
 
