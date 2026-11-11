@@ -39,7 +39,7 @@ function farmbriteHeaders() {
  * Find the draft order Aperture created for a donation.
  *
  * The record normally carries farmbrite_order_id; this is the fallback for older
- * records. The order note ends with "ref <first 8 chars of donation_id>". Plain
+ * records and for a tap whose order POST failed. The order note ends with "ref <first 8 chars of donation_id>". Plain
  * GET /orders excludes drafts, so list with status=Draft. Page ordering does not
  * reliably put newest last, so scan every page (bounded). Throws when Farmbrite
  * cannot be read, so "not found" always means "no order exists".
@@ -112,10 +112,18 @@ export async function POST(req: NextRequest) {
     // void instead of leaving inventory in Farmbrite that the CSV no longer shows.
     let orderId: string | null = null;
     let farmbriteError: string | null = null;
+    // No scan when the record says n8n never posted an order (it skipped Farmbrite, or
+    // there was no positive weight), or when this deployment has no Farmbrite key.
+    const w = record.weight_lbs;
+    const noOrderToFind =
+      typeof record.farmbrite_skipped_reason === "string" ||
+      w === null ||
+      (typeof w === "number" && w <= 0) ||
+      !process.env.FARMBRITE_API_KEY;
     try {
       orderId =
         (typeof record.farmbrite_order_id === "string" && record.farmbrite_order_id) ||
-        (await findFarmbriteOrderId(id));
+        (noOrderToFind ? null : await findFarmbriteOrderId(id));
       if (orderId) await deleteFarmbriteOrder(orderId);
     } catch (e) {
       farmbriteError = e instanceof Error ? e.message : "Farmbrite delete failed";

@@ -101,3 +101,34 @@ describe("void is honest about Farmbrite", () => {
     expect(put).not.toHaveBeenCalled();
   });
 });
+
+describe("void without a Farmbrite order to find", () => {
+  it("no FARMBRITE_API_KEY and no recorded order still voids, without calling Farmbrite", async () => {
+    const calls = fakeUpstream({ record: { donation_id: ID, farmbrite_order_id: null, weight_lbs: 12 } });
+    const res = await post({ donation_id: ID });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, farmbrite_order_removed: false });
+    expect(lastPut().voided).toBe(true);
+    expect(calls.some((c) => c.includes("farmbrite"))).toBe(false);
+  });
+
+  it("no FARMBRITE_API_KEY but a recorded order is still an honest failure", async () => {
+    fakeUpstream({ record: { donation_id: ID, farmbrite_order_id: "ord-1", weight_lbs: 12 } });
+    const res = await post({ donation_id: ID });
+    expect(res.status).toBe(502);
+    expect(lastPut().voided).toBeUndefined();
+  });
+
+  it.each([
+    ["n8n skipped Farmbrite", { farmbrite_skipped_reason: "no positive weight to log", weight_lbs: 12 }],
+    ["an empty-dock reading", { weight_lbs: 0 }],
+    ["a zone miss", { weight_lbs: null }],
+  ])("%s skips the order scan even with a key", async (_label, fields) => {
+    process.env.FARMBRITE_API_KEY = "fb-test";
+    const calls = fakeUpstream({ record: { donation_id: ID, ...fields } });
+    const res = await post({ donation_id: ID });
+    expect(await res.json()).toMatchObject({ ok: true, farmbrite_order_removed: false });
+    expect(lastPut().voided).toBe(true);
+    expect(calls.some((c) => c.includes("farmbrite"))).toBe(false);
+  });
+});
