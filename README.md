@@ -124,7 +124,7 @@ Day-to-day operations: `docs/OPERATIONS.md`.
 |---|---|
 | `N8N_WEBHOOK_URL` | `/api/donate`, to forward each tap to n8n |
 | `APERTURE_SHARED_TOKEN` | `/api/donate` and `/api/correct`, sent to n8n's **Verify Token** node |
-| `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header. `make-ipad-script.py` bakes it into the iPad build |
+| `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header. `scripts/make-ipad-script.py` bakes it into the iPad build |
 | `BLOB_READ_WRITE_TOKEN` | `/api/donate` (archives the photo), `/api/void`, `/api/export` |
 | `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo |
 | `N8N_CORRECTION_URL` | `/api/correct`. No workflow receives it yet |
