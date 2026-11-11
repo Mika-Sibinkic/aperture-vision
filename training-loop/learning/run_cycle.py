@@ -210,9 +210,10 @@ def cycle_once(sheet_id: str, dry_run: bool = False) -> dict:
     # Stage 7: git commit + push
     if not dry_run:
         try:
+            # Only the published tables. state/ holds raw Sheet rows and stays on the box
+            # (gitignored); the next cycle reads its priors from these tables.
             subprocess.run(["git", "-C", str(REPO_ROOT), "add",
-                            "public/learned-state/", "public/bias-table.json",
-                            "training-loop/learning/state/"],
+                            "public/learned-state/", "public/bias-table.json"],
                            check=True, capture_output=True)
             # Only what was just staged counts; untracked files elsewhere must not trigger a commit.
             staged = subprocess.run(["git", "-C", str(REPO_ROOT), "diff", "--cached", "--quiet"])
