@@ -1,74 +1,53 @@
-#!/usr/bin/env python3
-"""Unit test: prove weight never leaks into the vision prompt.
+"""Prove the true weight never reaches the vision API.
 
-We monkeypatch requests.post, feed a sample through evaluate_one, and assert
-no digit+unit token matches the true weight in the captured request body.
-
-Runs in CI on every commit. If this fails, the hidden-weight protocol is
-broken and the training loop is not scientifically valid — halt.
+evaluate_one is run against a sample whose label says 17.42 lb, with
+requests.post faked for each provider. The captured request body must not
+mention that weight. If this fails, the hidden-weight protocol is broken and
+the training loop's numbers mean nothing.
 """
-from __future__ import annotations
-
 import json
 import re
 import sys
-import tempfile
-import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evaluator  # noqa: E402
 
-
 WEIGHT_PATTERN = re.compile(r"\b(\d{1,4}(?:\.\d{1,3})?)\s*(lb|lbs|pound|pounds|kg|g|oz)\b", re.I)
+ANSWER = '{"weight_lbs":15.1,"item_type":"test","confidence":0.5}'
+FAKE_RESPONSES = {
+    "openai": {"choices": [{"message": {"content": ANSWER}}]},
+    "anthropic": {"content": [{"text": ANSWER}]},
+}
 
 
-class HiddenWeightTest(unittest.TestCase):
-    def test_weight_not_in_prompt_openai(self) -> None:
-        tmp_img = ROOT / "images"
-        tmp_lbl = ROOT / "labels"
-        tmp_img.mkdir(exist_ok=True)
-        tmp_lbl.mkdir(exist_ok=True)
+@pytest.mark.parametrize("provider", ["openai", "anthropic"])
+def test_weight_not_in_request(provider, tmp_path, monkeypatch):
+    monkeypatch.setattr(evaluator, "IMAGE_DIR", tmp_path)
+    monkeypatch.setattr(evaluator, "LABEL_DIR", tmp_path)
+    monkeypatch.setattr(evaluator, "RESIDUAL_LOG", tmp_path / "residuals.jsonl")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
 
-        # Synthetic sample with an OBVIOUS weight in the label.
-        sha = "deadbeef" + "0" * 8
-        (tmp_img / f"{sha}.jpg").write_bytes(b"\xff\xd8\xff\xd9")  # bare JPEG SOI/EOI
-        (tmp_lbl / f"{sha}.json").write_text(json.dumps({
-            "weight_lbs": 17.42, "item_type": "test can", "source": "unit_test",
-            "source_url": "about:test", "sha": sha, "scraped_at": "2026-01-01T00:00:00Z",
-        }))
+    sha = "deadbeef00000000"
+    (tmp_path / f"{sha}.jpg").write_bytes(b"\xff\xd8\xff\xd9")  # bare JPEG SOI/EOI
+    (tmp_path / f"{sha}.json").write_text(json.dumps({"weight_lbs": 17.42, "item_type": "test can"}))
 
-        captured: dict[str, str] = {}
+    captured = {}
 
-        def fake_post(url, headers=None, json=None, timeout=None):  # noqa: A002
-            captured["url"] = url
-            captured["body"] = __import__("json").dumps(json)
-            m = MagicMock()
-            m.raise_for_status = lambda: None
-            m.json = lambda: {"choices": [{"message": {"content": '{"weight_lbs":15.1,"item_type":"test","confidence":0.5}'}}]}
-            return m
+    def fake_post(url, headers=None, json=None, timeout=None):  # noqa: A002
+        captured["body"] = __import__("json").dumps(json)
+        return MagicMock(raise_for_status=lambda: None, json=lambda: FAKE_RESPONSES[provider])
 
-        import requests
-        with patch.object(requests, "post", side_effect=fake_post), \
-             patch.dict("os.environ", {"OPENAI_API_KEY": "sk-fake"}):
-            system = evaluator.load_system_prompt()
-            fingerprint = evaluator.prompt_fingerprint(system)
-            evaluator.evaluate_one(sha, "openai", "gpt-4o", system, fingerprint)
+    system = evaluator.load_system_prompt()
+    with patch.object(evaluator.requests, "post", side_effect=fake_post):
+        record = evaluator.evaluate_one(sha, provider, "model", system, evaluator.prompt_fingerprint(system))
 
-        # Scan the captured request body for any weight token.
-        matches = WEIGHT_PATTERN.findall(captured.get("body", ""))
-        leaked = [m for m in matches if m[0] == "17.42" or m[0] == "17" or m[0] == "17.4"]
-        self.assertFalse(
-            leaked,
-            f"weight leaked into prompt: {matches} (body: {captured.get('body', '')[:500]})",
-        )
-
-        # Cleanup
-        (tmp_img / f"{sha}.jpg").unlink()
-        (tmp_lbl / f"{sha}.json").unlink()
-
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    body = captured["body"]
+    assert "17.42" not in body
+    leaked = [m for m in WEIGHT_PATTERN.findall(body) if m[0] in ("17", "17.4", "17.42")]
+    assert not leaked, f"weight leaked into prompt: {leaked}"
+    assert record["weight_lbs_true"] == 17.42  # label was read, after the call
