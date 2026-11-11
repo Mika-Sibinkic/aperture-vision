@@ -17,26 +17,45 @@ screen.
 
 ## Try it in a minute
 
-None of this needs an API key or makes a paid call. It does need the network once,
-for the npm and pip installs. CI runs lines 2-4 (Python 3.12, Node 22) plus two offline
-checks of the workflow's own node code. The demo itself is not in CI.
+The first two lines need nothing installed but Node. They run the workflow's own
+weight node and Farmbrite matcher, the code that decides what gets logged, against
+synthetic model replies. The third line builds the relay and runs its tests. No line
+needs an API key or makes a paid call.
+
+```bash
+node scripts/test_parse_vision.js
+node scripts/test_farmbrite_match.js
+npm ci && npx tsc --noEmit && npm run build && npm test
+```
+
+The first line prints what each model reply turns into:
+
+````
+model reply: empty zone, 0 lb               -> logged weight_lbs 0
+model reply: 12.5 lb wrapped in ```json     -> logged weight_lbs 12.5
+model reply: 2500 lb                        -> logged weight_lbs 2500  flagged implausible_weight
+model reply: -5 lb                          -> logged weight_lbs 0
+model reply: prose, not JSON                -> throws "Vision returned non-JSON", nothing logged
+all parse-vision cases pass
+````
+
+I timed it from a fresh clone on my Mac (Node 22): 0.09 s and 0.06 s for the two node
+checks, 27 s for the npm line with a warm npm cache. You should see `32 passed`. The
+web tests cover the relay routes: the device token, input checks, duplicate taps,
+retries after a failed n8n call, undo and export. CI runs all three lines on every
+push, plus the board-detector tests below and `scripts/check-ipad-script.sh`.
+
+### Optional: the board detector
 
 ```bash
 bash demo/run_demo.sh --provider stub
-demo/.venv/bin/pip install -r training-loop/requirements.txt
-demo/.venv/bin/python -m pytest -q training-loop demo/test_charuco.py
-npm ci && npx tsc --noEmit && npm run build && npm test
-npm run dev
+demo/.venv/bin/python -m pytest -q demo
 ```
 
-I timed the first four lines from a fresh clone on my Mac (Python 3.14, Node 22). With
-empty npm and pip caches they took 55 s. With warm caches, three runs took 36, 36 and
-49 s. About half of each run is the demo installing OpenCV into its venv. You should see
-`9 passed` from pytest and `33 passed` from the web tests.
-
-The demo builds `demo/.venv`, looks for the printed ChArUco board in the two bundled
-frames, and writes `demo/output/accuracy-report.md`. Production does not run this board
-detector. The demo is the part you can run without the camera. On my Mac it found:
+This builds `demo/.venv` with OpenCV, looks for the printed ChArUco board in two real
+dock frames, and writes `demo/output/accuracy-report.md`. Production does not run
+this detector. From the same fresh clone, with a warm pip cache, it took 18 s and
+pytest reported `2 passed`. It found the board in one frame:
 
 ```
 - ChArUco detected: **1** / 2
@@ -47,30 +66,17 @@ detector. The demo is the part you can run without the camera. On my Mac it foun
 The stub makes no vision call and always answers 0 lb. Both frames show an empty dock,
 so the weight columns only prove the plumbing works. The miss is `IMG_0739.JPG`, an
 iPhone photo of the camera feed on a monitor: moire leaves 4 of the board's 40 markers
-readable. The night frame comes from the mounted camera itself. `demo/README.md` has
-the details. `bash demo/run_demo.sh --provider nim` sends the same frames to the
-production prompt and model instead. It needs a NIM key.
+readable. `demo/README.md` has the details.
 
-The Python tests cover the offline training loop and the board detector. One proves
-the offline evaluator never sends the known weight to the model. The web tests cover
-the relay routes: the device token, input checks, duplicate taps, retries after a
-failed n8n call, undo and export. `node scripts/test_parse_vision.js` runs the
-workflow's weight node (the >2000 lb flag, negative weights, fenced JSON) and
-`node scripts/test_farmbrite_match.js` its Farmbrite product matcher. `npm run dev`
-serves the UI only, the legacy PWA on `localhost:3000`. A tap there returns
-`Server not configured: N8N_WEBHOOK_URL missing`, because the real path needs n8n, the
-iPad and the camera.
+### Against the live model
 
-## What a tap returns
-
-I have not pasted a live response here yet. `python3 scripts/vision-regression-test.py`
-sends the control frames straight to NIM with the production prompt and model and
-writes nothing anywhere. `--e2e` sends three control frames through the live relay
-instead, prints the item and weight for each, and voids them. Their Sheet
-rows stay: two say `REGRESSION TEST`, and the phantom control's says `Kale`. The relay passes through what the workflow's **Shape response** node
-builds. The fields include `weight_lbs`, `item_type`, `container_type`, `container_count`, `weight_lbs_low`,
-`weight_lbs_high`, `implausible_weight`, `prompt_version`, `model`,
-`farmbrite_order_id` and `notes`.
+`python3 scripts/vision-regression-test.py` sends the control frames straight to NIM
+with the committed prompt and the production model, and writes nothing anywhere. It
+needs a NIM key in `SECRETS.local.md` and spends NIM credits. `--e2e` sends three
+control frames through your relay instead, prints the item and weight for each, and
+voids them. Their Sheet rows stay: two say `REGRESSION TEST`, and the phantom
+control's says `Kale`. The script shrinks frames with macOS `sips`; elsewhere it sends
+them at full size.
 
 ## How it works
 
@@ -86,17 +92,20 @@ iPad (Scriptable)                          n8n Cloud (aperture-workflow-ipad-nim
 
 - **Capture.** Tested with a Hikvision AcuSense over ISAPI digest. The client is
   `camera-access/ipad/aperture-pull.js`.
-- **Scale reference.** A printed ChArUco board hangs in the camera's view, so the
-  model sees an object of known size in every frame. `demo/charuco_preprocessor.py`
-  measures the board with OpenCV, but only in the offline demo, and it finds the board
-  in 1 of the 2 bundled frames.
-- **Prompt.** `prompts/weight-estimation.md` (v0.8-scene) is the file to change if you
+- **Scale reference.** A printed ChArUco board (8×10 grid of 4 in squares) hangs in
+  the camera's view, so the model sees an object of known size in every frame. The
+  prompt tells the model the square size. `demo/charuco_preprocessor.py` measures the
+  board with OpenCV, but only in the offline demo, and it finds the board in 1 of the
+  2 bundled frames.
+- **Prompt.** `prompts/weight-estimation.md` (v0.9-board) is the file to change if you
   want the model to behave differently. It has the model count containers and name
   goods only inside the taped zone, return a types-only JSON schema, and answer
   "unidentified" or "empty" when that is the truth. Each version records the failure it
   fixes. `scripts/rewire-n8n-ipad-nim.py` pushes it into the workflow.
-- **Learned priors: built, not wired.** `training-loop/learning/` computes per-item
-  densities and bias multipliers, but the live workflow applies empty tables.
+- **No learned corrections.** The weight node logs the model's number as it comes,
+  clamped at 0 and flagged over 2000 lb. An earlier offline training loop scored a
+  different model on product photos, so its corrections would not have fit
+  production. It is in git history.
 
 ## Why it is built this way
 
@@ -114,7 +123,8 @@ every load. The price is that every weight is an estimate.
 1. **n8n.** Import `n8n/aperture-workflow-ipad-nim.json` and follow `n8n/README.md`.
 2. **NVIDIA NIM key.** Store it as the `NVIDIA NIM (Aperture)` credential in n8n.
 3. **Google Sheet** with a `Donations` tab, connected through n8n's Google Sheets
-   credential.
+   credential. Import `data/donations-sheet-template.csv` as that tab: its header is
+   the columns the workflow writes.
 4. **Farmbrite.** The workflow posts a Farmbrite draft order for every tap with a
    positive weight. No n8n variable turns that off. To skip Farmbrite, disable the
    **Farmbrite: log order** node. To use it, first replace the product map in **Build
@@ -122,8 +132,8 @@ every load. The price is that every weight is an estimate.
 5. **Vercel + Blob.** Deploy this repo to Vercel, create a private Blob store, and set
    the variables in the table below.
 6. **iPad build.** Set `RELAY` at the top of `scripts/make-ipad-script.py` to your
-   Vercel URL. Put the camera's address and login in a gitignored `SECRETS.local.md`
-   as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
+   Vercel URL. `scripts/vision-regression-test.py` reads it from there too. Put the
+   camera's address and login in a gitignored `SECRETS.local.md` as two lines, ``LAN: `<camera-ip>` `` and ``user `<user>` / pass `<password>` ``.
    Export `APERTURE_DEVICE_TOKEN` (the same value as in Vercel), run
    `python3 scripts/make-ipad-script.py`, then follow
    `camera-access/ipad/ONSITE-CARD.md`.
@@ -139,12 +149,10 @@ Day-to-day operations: `docs/OPERATIONS.md`.
 | Variable | Read by |
 |---|---|
 | `N8N_WEBHOOK_URL` | `/api/donate`, to forward each tap to n8n |
-| `APERTURE_SHARED_TOKEN` | `/api/donate` and `/api/correct`, sent to n8n's **Verify Token** node |
+| `APERTURE_SHARED_TOKEN` | `/api/donate`, sent to n8n's **Verify Token** node |
 | `APERTURE_DEVICE_TOKEN` | Every `/api/*` route, checked against the `x-aperture-token` header. `scripts/make-ipad-script.py` bakes it into the iPad build |
 | `BLOB_READ_WRITE_TOKEN` | `/api/donate` (archives the photo), `/api/void`, `/api/export` |
 | `FARMBRITE_API_KEY` | `/api/void`, to delete the Farmbrite draft on undo. Unset, undo skips Farmbrite, and fails for a tap that recorded an order id |
-| `N8N_CORRECTION_URL` | `/api/correct`. No workflow receives it yet |
-| `NEXT_PUBLIC_LOCATION_LABEL` | `app/page.tsx`, the legacy PWA's location label |
 
 Files that are local on purpose are not in the repo:
 `SECRETS.local.md`, the generated `*.local.js` iPad build, Farmbrite CSV exports, and
@@ -157,13 +165,11 @@ pounds as an operational record and a trend, not audited poundage. The model's
 self-reported confidence did not separate good readings from bad ones, so no operator
 screen shows it. The relay checks a device token, but the check stays open until
 `APERTURE_DEVICE_TOKEN` is set, so treat the relay URL as a secret until then. The
-generated iPad build holds the camera password. The Next.js PWA in `app/` is legacy:
-it posts no image, so it only worked with the bridge-era workflows (in git history). It
-also sends no device token, and the token cannot go in browser code, so once
-`APERTURE_DEVICE_TOKEN` is set every PWA tap gets a 401.
-`/api/correct` exists, but nothing on the n8n side receives corrections yet, so ground
-truth does not flow back. What is secret and how to report a problem:
-[SECURITY.md](SECURITY.md).
+generated iPad build holds the camera password. The live workflow still runs prompt
+v0.8-scene, which tells the model the board's squares are 6 in; they are 4 in. The fix
+(v0.9-board) is committed but not yet checked against NIM or deployed. Nothing feeds
+scale weights back, so there is no ground truth. What is secret and how to report a
+problem: [SECURITY.md](SECURITY.md).
 
 ## Status
 
@@ -173,17 +179,14 @@ and is the record of what runs and what breaks on its own. `CHANGELOG.md` has th
 
 ## Contributing
 
-Issues and pull requests are welcome. Run the offline checks above first, and run
-`scripts/vision-regression-test.py` against a live model for any prompt change.
+Issues and pull requests are welcome. Run the three lines in "Try it in a minute"
+first, and run `scripts/vision-regression-test.py` against a live model for any prompt
+change.
 
 ## Provenance
 
-This is the public copy of the private working repository, with the full commit history
-preserved. Before publishing, `git-filter-repo` removed camera credentials, LAN and
-hosting identifiers, a third party's confidential deal material, and personal contact
-details from file contents. A placeholder company name and role descriptions stand in
-for the removed names. Commits before 2026-06-10 were reconstructed from file timestamps
-when the project moved into git.
+This is the public copy of the private working repository. Commits before 2026-06-10
+were reconstructed from file timestamps when the project moved into git.
 
 Much of the code and documentation was written with Claude as a co-author.
 

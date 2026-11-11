@@ -7,6 +7,6 @@ JSON with an estimated weight, and the result is logged to a Google Sheet and Fa
 - Start with `README.md`, then `docs/OPERATIONS.md` for what is live.
 - Vision prompt versions live in `prompts/weight-estimation.md`; each version records the
   failure it fixes. Do not remove the anti-parroting or empty-zone rules.
-- Before committing, run the offline block in README's "Try it in a minute" (9 Python
-  tests, 33 web tests). CI runs lines 2-4 of it plus `scripts/test_*.js`, not the demo.
+- Before committing, run the three lines in README's "Try it in a minute" (32 web tests
+  on 2026-11-11). CI runs them, `pytest demo` (2 tests) and `scripts/check-ipad-script.sh`.
 - Never commit credentials. `.env*` files other than `.env.example` are gitignored.
