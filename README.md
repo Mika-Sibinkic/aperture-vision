@@ -43,8 +43,8 @@ model reply: prose, not JSON                -> throws "Vision returned non-JSON"
 all parse-vision cases pass
 ````
 
-I timed it from a fresh clone on my Mac (Node 22): 0.09 s and 0.06 s for the two node
-checks, 27 s for the npm line with a warm npm cache. You should see `32 passed`. The
+I timed it from a fresh clone on my Mac (Node 22, `/usr/bin/time`): 0.02 s for each
+node check, 8 s for the npm line with a warm npm cache. You should see `32 passed`. The
 web tests cover the relay routes: the device token, input checks, duplicate taps,
 retries after a failed n8n call, undo and export. CI runs all three lines on every
 push, plus `scripts/check-ipad-script.sh`.
