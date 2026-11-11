@@ -61,7 +61,7 @@ def main() -> None:
 
     if best:
         name, n, ids = best
-        flat_ids = sorted({int(x[0]) for x in ids}) if ids is not None else []
+        flat_ids = sorted(set(ids.flatten().tolist()))
         print(f"\nBest dictionary: {name}  ({n} markers, ids: {flat_ids[:20]}{'…' if len(flat_ids) > 20 else ''})")
     else:
         print("\nNo dictionary detected ANY markers in this image.")
