@@ -742,9 +742,11 @@ async function runApp(cfg) {
         v.headers = relayHeaders(cfg);
         v.body = JSON.stringify({ donation_id: action.id, reason: "undone on the iPad" });
         const res = await v.loadJSON();
-        await call(res && res.ok
-          ? "showRemoved()"
-          : "showError('Could not remove that entry.')");
+        // A Farmbrite failure keeps the donation logged (the relay retries on the next Undo).
+        const why = res && res.farmbrite_error
+          ? "Still logged: Farmbrite did not remove the order (" + res.farmbrite_error + "). Tap Undo again."
+          : (res && res.error) || "Could not remove that entry.";
+        await call(res && res.ok ? "showRemoved()" : "showError(" + JSON.stringify(String(why)) + ")");
         await refresh();
       } catch (e) {
         await call("showError(" + JSON.stringify(String(e && e.message ? e.message : e)) + ")");
