@@ -38,21 +38,25 @@ In the **Scriptable app**, just tap **Aperture**. A menu appears; choose **Syste
 (The menu only appears inside the Scriptable app. The Home Screen icon you add in step 4
 goes straight to logging a donation, so volunteers never see it.)
 
-You'll get a checklist:
+You'll get an alert titled **All good — ready for volunteers** (or **Not ready**)
+with one line per step. With an empty zone it looks like this (the sizes vary by frame):
 
 ```
-✅ Camera connected                         412 KB
-✅ Photo ready                              268 KB
-✅ Weight recorded                          0.0 lbs empty
-✅ ALL GOOD: ready for volunteers
+✅ Camera connected
+     <size> KB
+✅ Photo ready
+     <size> KB
+✅ Weight recorded
+     0.0 lbs empty
+✅ Test entry removed
 ```
 
 - **All ✅ → you're done. Go to step 4.**
 - **Any ❌ → stop and do the one thing next to it** (see the short list below).
   Don't debug anything else; every other hop is already proven.
 
-The self-test writes one row whose description starts with `SYSTEM CHECK`.
-Delete it later if you care; it's harmless.
+The self-test is a real tap, then an undo. Its Sheet row stays, with a description
+that starts with `SYSTEM CHECK`. The CSV export and Farmbrite do not keep it.
 
 ### 4. Make it the "app" for volunteers: THIS is the handoff
 Until this is done there is no front end; the script only exists inside Scriptable.
@@ -106,10 +110,9 @@ on each entry. Volunteers never need the Scriptable app.
 |---|---|
 | ❌ Camera: *can't reach the camera* | The iPad is on the wrong Wi-Fi. Switch it to the Cul2vate network and run the self-test again. |
 | ❌ Camera: *rejected the saved password* | The camera password changed. Text Mika; he regenerates the file in 1 minute. |
-| ❌ Server: anything | The site internet is down, or the service is briefly out. Wait 60 seconds and run the self-test again. If it fails twice, text Mika; nothing on the iPad is wrong. |
-
-That's the whole list. There is no other failure mode to chase: the camera hop is
-the only piece that isn't already verified from off-site.
+| ❌ Server: *unauthorized* | The iPad build has no device token, or the wrong one. Regenerate it with `APERTURE_DEVICE_TOKEN` exported (the same value as in Vercel) and AirDrop it again. |
+| ❌ Server: any other error | The site internet is down, or the service is briefly out. Wait 60 seconds and run the self-test again. If it fails twice, text Mika. |
+| ❌ Test entry removed | The weight was logged but the undo failed. From the menu, choose **Recent log (undo)** and tap the `SYSTEM CHECK` entry. |
 
 ---
 

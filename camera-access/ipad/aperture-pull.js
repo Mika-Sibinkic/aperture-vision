@@ -204,8 +204,9 @@ async function resolveConfig(mode) {
     relay: Keychain.get(KEYS.relay),
     location: Keychain.contains(KEYS.location) ? Keychain.get(KEYS.location) : CONFIG.location,
     maxPixels: CONFIG.maxPixels,
-    exportUrl: CONFIG.exportUrl,
-    voidUrl: CONFIG.voidUrl,
+    // Same derivation as make-ipad-script.py, so one Relay URL drives all three routes.
+    exportUrl: Keychain.get(KEYS.relay).replace("/api/donate", "/api/export"),
+    voidUrl: Keychain.get(KEYS.relay).replace("/api/donate", "/api/void"),
     deviceToken: Keychain.contains(KEYS.deviceToken) ? Keychain.get(KEYS.deviceToken) : CONFIG.deviceToken,
   };
 }
@@ -412,17 +413,25 @@ async function selfTest(cfg) {
   // The check is a real tap, so it is voided afterwards: no CSV row, no Farmbrite draft.
   // The Sheet row stays (n8n owns it) and is labelled by its description.
   const checkId = UUID.string().toLowerCase();
+  let posted = false;
   try {
     const res = await withTimeout(
       postToRelay(cfg, small.toBase64String(), "SYSTEM CHECK \u2014 ignore this row", checkId), RELAY_TIMEOUT_S, "Server");
     const ok = Boolean(res && (typeof res.weight_lbs === "number" || res.item_type));
     steps.push({ ok: ok, name: "Weight recorded",
       detail: ok ? ((typeof res.weight_lbs === "number" ? res.weight_lbs.toFixed(1) + " lbs" : "") + " " + (res.item_type || "")).trim() : "no weight" });
-    const undone = await withTimeout(voidDonation(cfg, checkId, "system check"), 90, "Undo");
-    steps.push({ ok: Boolean(undone && undone.ok), name: "Test entry removed",
-      detail: undone && undone.ok ? "" : String((undone && undone.error) || "not removed").slice(0, 120) });
+    posted = true;
   } catch (e) {
     steps.push({ ok: false, name: "Server", detail: String(e.message).slice(0, 120) });
+  }
+  if (posted) {
+    try {
+      const undone = await withTimeout(voidDonation(cfg, checkId, "system check"), 90, "Undo");
+      steps.push({ ok: Boolean(undone && undone.ok), name: "Test entry removed",
+        detail: undone && undone.ok ? "" : String((undone && undone.error) || "not removed").slice(0, 120) });
+    } catch (e) {
+      steps.push({ ok: false, name: "Test entry removed", detail: String(e.message).slice(0, 120) });
+    }
   }
   note = "Done.";
   render();
